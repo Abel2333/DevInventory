@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row, Sqlite, sqlite::SqlitePoolOptions};
 use std::{
     fs,
+    fs::OpenOptions,
     path::{Path, PathBuf},
 };
 use uuid::Uuid;
@@ -32,6 +33,11 @@ impl Repository {
     pub async fn connect(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
+        }
+        if !path.exists() {
+            // Touch the file so SQLite doesn't fail with code 14 on some sandboxed FS.
+            OpenOptions::new().create(true).write(true).open(path)?;
+            info!("created new database file at {}", path.to_string_lossy());
         }
         let url = format!("sqlite://{}", path.to_string_lossy());
         debug!("connecting sqlite at {}", url);

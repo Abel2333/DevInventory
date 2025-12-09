@@ -63,6 +63,8 @@ pub enum Commands {
         /// Case-insensitive substring to match
         query: String,
     },
+    /// Initialize master key (generate, optionally store to keyring)
+    Init,
     /// Remove a secret permanently
     Rm { name: String },
     /// Rotate master key and re-encrypt all secrets
@@ -90,26 +92,24 @@ pub async fn run() -> Result<()> {
         base64_inline: cli.dmk.clone(),
         allow_keyring: !cli.no_keyring,
     });
-    let master_key = key_provider.obtain().await?;
-    info!(
-        "master key ready (source: {})",
-        if cli.dmk.is_some() {
-            "inline"
-        } else if cli.no_keyring {
-            "generated --no-keyring"
-        } else {
-            "keyring or generated"
-        }
-    );
-    let crypto = SecretCrypto::new(master_key.clone());
 
     match cli.command {
+        Commands::Init => {
+            let master_key = key_provider.obtain(true).await?;
+            let crypto = SecretCrypto::new(master_key.clone());
+            // quick touch to ensure key material used and zeroized after scope
+            let _ = crypto.encrypt("init", b"").ok();
+            println!("✅ master key initialized");
+        }
         Commands::Add {
             name,
             kind,
             note,
             value,
         } => {
+            let master_key = key_provider.obtain(false).await?;
+            info!("master key ready for add");
+            let crypto = SecretCrypto::new(master_key.clone());
             let secret = match value {
                 Some(v) => v,
                 None => prompt_password("Secret value: ")?,
@@ -120,6 +120,8 @@ pub async fn run() -> Result<()> {
             println!("✅ saved: {}", name);
         }
         Commands::Get { name, show } => {
+            let master_key = key_provider.obtain(false).await?;
+            let crypto = SecretCrypto::new(master_key.clone());
             let record = repo
                 .fetch_secret(&name)
                 .await?
@@ -134,6 +136,8 @@ pub async fn run() -> Result<()> {
             }
         }
         Commands::List => {
+            // requires key presence to avoid silently generating
+            let _ = key_provider.obtain(false).await?;
             let rows = repo.list_secrets().await?;
             let view: Vec<SecretRow> = rows
                 .into_iter()
@@ -151,6 +155,7 @@ pub async fn run() -> Result<()> {
             println!("{}", table);
         }
         Commands::Search { query } => {
+            let _ = key_provider.obtain(false).await?;
             let rows = repo.search_secrets(&query).await?;
             let view: Vec<SecretRow> = rows
                 .into_iter()
@@ -168,6 +173,7 @@ pub async fn run() -> Result<()> {
             println!("{}", table);
         }
         Commands::Rm { name } => {
+            let _ = key_provider.obtain(false).await?;
             let deleted = repo.delete_secret(&name).await?;
             if deleted {
                 info!("removed secret: {}", name);
@@ -178,8 +184,10 @@ pub async fn run() -> Result<()> {
             }
         }
         Commands::Rotate => {
+            let current_key = key_provider.obtain(false).await?;
+            let current_crypto = SecretCrypto::new(current_key.clone());
             let new_key = key_provider.rotate().await?;
-            repo.reencrypt_all(&crypto, &new_key).await?;
+            repo.reencrypt_all(&current_crypto, &new_key).await?;
             info!("master key rotated and secrets re-encrypted");
             println!("🔑 master key rotated; remember to back it up");
         }

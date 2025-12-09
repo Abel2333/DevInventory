@@ -2,7 +2,7 @@ use crate::crypto::MasterKey;
 use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose};
 use keyring::Entry;
-use log::{debug, info};
+use log::{debug, info, warn};
 use rand::RngCore;
 use zeroize::Zeroize;
 
@@ -23,7 +23,8 @@ impl MasterKeyProvider {
         Self { src }
     }
 
-    pub async fn obtain(&self) -> Result<MasterKey> {
+    /// Obtain existing master key. If `generate_if_missing` is true, will create a new key.
+    pub async fn obtain(&self, generate_if_missing: bool) -> Result<MasterKey> {
         if let Some(k) = self
             .src
             .base64_inline
@@ -35,10 +36,17 @@ impl MasterKeyProvider {
         }
 
         if self.src.allow_keyring
-            && let Some(k) = self.read_keyring()?
+            && let Some(k) = self.read_keyring().unwrap_or_else(|e| {
+                warn!("keyring unavailable ({}); cannot load stored key", e);
+                None
+            })
         {
             info!("master key loaded from keyring");
             return Ok(k);
+        }
+
+        if !generate_if_missing {
+            return Err(anyhow!("master key not found; provide --dmk or run `init`"));
         }
 
         let key = generate_key();
@@ -48,9 +56,16 @@ impl MasterKeyProvider {
             encoded
         );
         if self.src.allow_keyring {
-            self.write_keyring(&encoded)?;
-            info!("new master key written to keyring");
-            println!("Stored in OS keyring under service '{SERVICE}' account '{ACCOUNT}'.");
+            match self.write_keyring(&encoded) {
+                Ok(_) => {
+                    info!("new master key written to keyring");
+                    println!("Stored in OS keyring under service '{SERVICE}' account '{ACCOUNT}'.");
+                }
+                Err(e) => {
+                    warn!("cannot write keyring: {e}; you must store the key manually");
+                    println!("Keyring not available; you must store the key yourself.");
+                }
+            }
         } else {
             println!("Not stored in keyring (--no-keyring). You must manage it manually.");
         }
@@ -62,9 +77,16 @@ impl MasterKeyProvider {
         let encoded = general_purpose::STANDARD.encode(&key.0);
         println!("New master key (base64). Save immediately: {}", encoded);
         if self.src.allow_keyring {
-            self.write_keyring(&encoded)?;
-            println!("Keyring updated.");
-            info!("keyring updated during rotation");
+            match self.write_keyring(&encoded) {
+                Ok(_) => {
+                    println!("Keyring updated.");
+                    info!("keyring updated during rotation");
+                }
+                Err(e) => {
+                    warn!("keyring update failed: {e}; keep this key safe manually");
+                    println!("Keyring update failed; you must store this new key yourself.");
+                }
+            }
         }
         Ok(key)
     }
