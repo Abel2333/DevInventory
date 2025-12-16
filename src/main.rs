@@ -1,6 +1,8 @@
 mod cli;
+mod config;
 mod crypto;
 mod db;
+mod domain;
 mod keymgr;
 
 use anyhow::Result;

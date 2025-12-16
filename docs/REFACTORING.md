@@ -1,11 +1,13 @@
 # DevInventory 架构重构计划
 
 ## 目标
+
 重构项目以降低耦合度，并为未来添加TUI做准备。
 
 ## 当前架构问题
 
 ### 严重问题
+
 1. **业务逻辑嵌入CLI模块** - `cli.rs`混合了命令解析、用户交互、输出格式化和编排逻辑
 2. **缺少服务/领域层** - CLI直接调用db和crypto，没有抽象
 3. **展示逻辑与业务逻辑耦合** - `mask()`、`SecretRow`、println!调用遍布代码
@@ -13,6 +15,7 @@
 5. **配置管理分散** - `resolve_db_path()`在db.rs中，CLI参数直接传递
 
 ### 当前结构（720行代码）
+
 ```
 main.rs (19行)     - 入口
 cli.rs (212行)     - CLI + 所有业务逻辑 + UI
@@ -44,9 +47,9 @@ src/
 ```
 ┌─────────────────────────────────────────┐
 │         UI层 (ui/)                      │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
-│  │ cli.rs  │  │ tui.rs  │  │ common  │ │
-│  └─────────┘  └─────────┘  └─────────┘ │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+│  │ cli.rs  │  │ tui.rs  │  │ common  │  │
+│  └─────────┘  └─────────┘  └─────────┘  │
 └──────────────┬──────────────────────────┘
                │ 调用
 ┌──────────────▼──────────────────────────┐
@@ -56,9 +59,9 @@ src/
                │ 使用
 ┌──────────────▼──────────────────────────┐
 │     基础设施层                          │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐  │
-│  │  db.rs  │ │keymgr.rs│ │crypto.rs │  │
-│  └─────────┘ └─────────┘ └──────────┘  │
+│  ┌─────────┐ ┌─────────┐ ┌──────────┐   │
+│  │  db.rs  │ │keymgr.rs│ │crypto.rs │   │
+│  └─────────┘ └─────────┘ └──────────┘   │
 └─────────────────────────────────────────┘
           ▲
           │ 使用
@@ -92,6 +95,7 @@ ui/cli.rs - 格式化输出 "✓ Secret added"
 
 **1.1 创建 `src/domain.rs`**
 定义领域模型，与DB和UI表示分离：
+
 ```rust
 pub struct Secret {
     pub id: Uuid,
@@ -115,6 +119,7 @@ pub struct SecretMetadata {
 
 **1.2 创建 `src/config.rs`**
 集中配置管理：
+
 ```rust
 pub struct Config {
     pub db_path: PathBuf,
@@ -126,11 +131,13 @@ impl Config {
     pub fn resolve_db_path() -> Result<PathBuf> { ... }
 }
 ```
+
 - 从 `db.rs` 移动 `resolve_db_path()`
 - 将CLI参数转换为配置对象
 
 **1.3 创建 `src/service.rs`**
 核心业务逻辑层：
+
 ```rust
 pub struct SecretService {
     repo: Repository,
@@ -159,12 +166,14 @@ impl SecretService {
     pub async fn rotate_master_key(&self) -> Result<()>
 }
 ```
+
 - 封装所有 crypto + keymgr + db 的协调逻辑
 - 返回领域模型，而不是数据库记录
 
 ### 阶段2：创建UI模块
 
 **2.1 创建 `src/ui/mod.rs`**
+
 ```rust
 pub mod cli;
 pub mod common;
@@ -174,6 +183,7 @@ pub use cli::run_cli;
 
 **2.2 创建 `src/ui/common.rs`**
 从 `cli.rs` 移动展示相关工具：
+
 ```rust
 pub fn mask(s: &str) -> String { ... }
 
@@ -184,6 +194,7 @@ pub struct SecretDisplayRow {
 
 **2.3 创建 `src/ui/cli.rs`**
 纯CLI关注点：
+
 - Clap命令定义
 - 用户交互（rpassword提示）
 - 格式化输出（Table打印）
@@ -195,6 +206,7 @@ pub struct SecretDisplayRow {
 **3.1 将命令处理逻辑从 `cli.rs` 移到 `service.rs`**
 
 当前 `cli.rs` 中的每个命令处理器：
+
 ```rust
 // 旧方式（cli.rs）
 Commands::Add { name, value, kind, note } => {
@@ -208,6 +220,7 @@ Commands::Add { name, value, kind, note } => {
 ```
 
 重构为：
+
 ```rust
 // 新方式（ui/cli.rs）
 Commands::Add { name, value, kind, note } => {
@@ -230,12 +243,14 @@ pub async fn add_secret(...) -> Result<Secret> {
 **3.2 更新 `db.rs` 中的 `reencrypt_all` 解耦**
 
 当前问题：
+
 ```rust
 // db.rs:189
 pub async fn reencrypt_all(&self, old: &SecretCrypto, new: &SecretCrypto) -> Result<()>
 ```
 
 重构方案 - 使用函数指针：
+
 ```rust
 pub async fn reencrypt_all<F>(
     &self,
@@ -247,6 +262,7 @@ where
 ```
 
 或者更简单 - 在service层处理：
+
 ```rust
 // service.rs
 pub async fn rotate_master_key(&self) -> Result<()> {
@@ -272,6 +288,7 @@ pub async fn rotate_master_key(&self) -> Result<()> {
 ### 阶段4：更新入口点
 
 **4.1 简化 `main.rs`**
+
 ```rust
 mod config;
 mod crypto;
@@ -313,10 +330,12 @@ async fn main() -> Result<()> {
 ### 阶段5：清理和测试
 
 **5.1 删除旧的 `cli.rs`**
+
 - 所有逻辑已迁移到 `ui/cli.rs` 和 `service.rs`
 
 **5.2 添加服务层测试**
 `service.rs` 现在可测试了：
+
 ```rust
 #[cfg(test)]
 mod tests {
@@ -336,36 +355,46 @@ mod tests {
 ## 关键决策和权衡
 
 ### 决策1：SecretRecord vs Secret
+
 **决策**: 保留 `SecretRecord` 在 `db.rs`，创建新的 `Secret` 在 `domain.rs`
 **理由**:
+
 - `SecretRecord` 包含 `ciphertext`，是数据库表示
 - `Secret` 包含 `plaintext`，是领域表示
 - Repository 负责转换：`SecretRecord` ↔ `Secret`
 
 ### 决策2：服务层位置
+
 **决策**: 单个 `service.rs` 文件，而不是 `services/` 目录
 **理由**:
+
 - 当前只有一个服务（SecretService）
 - 保持简单，项目只有720行
 - 如果将来需要，可以轻松拆分为 `services/secret.rs`
 
 ### 决策3：错误处理
+
 **决策**: 继续使用 `anyhow::Result`，不创建自定义错误类型
 **理由**:
+
 - 对CLI应用足够好
 - 避免过度工程
 - 如果将来需要细粒度错误处理，可以逐步迁移
 
 ### 决策4：异步边界
+
 **决策**: 服务层保持异步（因为Repository是异步的）
 **理由**:
+
 - Repository 使用 SQLite 的异步驱动
 - 服务层自然应该是异步的
 - UI层（CLI/TUI）可以选择如何处理异步
 
 ### 决策5：配置注入 vs 全局状态
+
 **决策**: 通过构造函数注入依赖，避免全局状态
 **理由**:
+
 - 更易测试
 - 更清晰的依赖关系
 - 符合Rust最佳实践
@@ -400,6 +429,7 @@ async fn main() -> Result<()> {
 ## 关键文件修改列表
 
 ### 新增文件
+
 - `src/config.rs` - 配置管理
 - `src/domain.rs` - 领域模型
 - `src/service.rs` - 业务逻辑服务层
@@ -408,15 +438,18 @@ async fn main() -> Result<()> {
 - `src/ui/common.rs` - 共享UI工具
 
 ### 修改文件
+
 - `src/main.rs` - 简化为配置+初始化+UI启动
 - `src/db.rs` - 移除 `resolve_db_path()`，可选：重构 `reencrypt_all()`
 
 ### 删除文件
+
 - `src/cli.rs` - 拆分到 `ui/cli.rs` 和 `service.rs`
 
 ## 验证清单
 
 重构完成后，验证：
+
 - [ ] 所有原有命令功能正常（init, add, get, list, search, rm, rotate）
 - [ ] 现有测试通过（crypto和db的测试）
 - [ ] service层有新的单元测试
