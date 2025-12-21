@@ -9,6 +9,7 @@ use zeroize::Zeroize;
 const SERVICE: &str = "devinventory";
 const ACCOUNT: &str = "dmk";
 
+#[derive(Clone)]
 pub struct MasterKeySource {
     pub base64_inline: Option<String>,
     pub allow_keyring: bool,

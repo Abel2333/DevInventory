@@ -1,18 +1,11 @@
-use crate::crypto::{MasterKey, SecretCrypto};
+use crate::crypto::SecretCrypto;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use dirs::config_dir;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row, Sqlite, sqlite::SqlitePoolOptions};
-use std::{
-    fs,
-    fs::OpenOptions,
-    path::{Path, PathBuf},
-};
+use std::{fs, fs::OpenOptions, path::Path};
 use uuid::Uuid;
-
-const DEFAULT_DB_NAME: &str = "devinventory.db";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SecretRecord {
@@ -78,9 +71,11 @@ impl Repository {
         kind: Option<String>,
         note: Option<String>,
         ciphertext: &[u8],
-    ) -> Result<()> {
+    ) -> Result<SecretRecord> {
+        let id = Uuid::new_v4();
         let now = Utc::now();
-        sqlx::query(
+
+        let row = sqlx::query(
             r#"
             INSERT INTO secrets (id, name, kind, note, ciphertext, created_at, updated_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -88,20 +83,31 @@ impl Repository {
                 kind=excluded.kind,
                 note=excluded.note,
                 ciphertext=excluded.ciphertext,
-                updated_at=excluded.updated_at;
+                updated_at=excluded.updated_at
+            RETURNING *
             "#,
         )
-        .bind(Uuid::new_v4().to_string())
+        .bind(id.to_string())
         .bind(name)
-        .bind(kind)
-        .bind(note)
+        .bind(&kind)
+        .bind(&note)
         .bind(ciphertext)
         .bind(now)
         .bind(now)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
+
         info!("upserted secret '{}'", name);
-        Ok(())
+
+        Ok(SecretRecord {
+            id: Uuid::parse_str(row.get::<String, _>("id").as_str()).unwrap_or_else(|_| Uuid::nil()),
+            name: row.get("name"),
+            kind,
+            note,
+            ciphertext: row.get("ciphertext"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
     }
 
     pub async fn fetch_secret(&self, name: &str) -> Result<Option<SecretRecord>> {
@@ -189,7 +195,7 @@ impl Repository {
     pub async fn reencrypt_all(
         &self,
         old_crypto: &SecretCrypto,
-        new_key: &MasterKey,
+        new_crypto: &SecretCrypto,
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
         let rows = sqlx::query(r#"SELECT id, name, ciphertext FROM secrets"#)
@@ -197,11 +203,11 @@ impl Repository {
             .await?;
         let total = rows.len();
 
-        let new_crypto = SecretCrypto::new(new_key.clone());
         for row in rows {
             let name: String = row.get("name");
             let ct: Vec<u8> = row.get("ciphertext");
             let id: String = row.get("id");
+
             let plaintext = old_crypto.decrypt(&name, &ct)?;
             let new_ct = new_crypto.encrypt(&name, &plaintext)?;
             sqlx::query("UPDATE secrets SET ciphertext = ?1, updated_at = ?2 WHERE id = ?3")
@@ -217,21 +223,12 @@ impl Repository {
     }
 }
 
-pub fn resolve_db_path(override_path: Option<&PathBuf>) -> Result<PathBuf> {
-    if let Some(p) = override_path {
-        return Ok(p.clone());
-    }
-    // Default location: $XDG_CONFIG_HOME/devinventory/devinventory.db
-    let base = config_dir()
-        .context("cannot find config dir")?
-        .join("devinventory");
-    Ok(base.join(DEFAULT_DB_NAME))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::crypto::MasterKey;
     use crate::crypto::SecretCrypto;
+    use crate::db::Repository;
+    use std::path::PathBuf;
 
     #[tokio::test]
     async fn repo_crud_and_rotate() {
@@ -257,8 +254,8 @@ mod tests {
 
         // rotate
         let key2 = MasterKey([2u8; 32]);
-        repo.reencrypt_all(&crypto1, &key2).await.unwrap();
         let crypto2 = SecretCrypto::new(key2.clone());
+        repo.reencrypt_all(&crypto1, &crypto2).await.unwrap();
         let rec2 = repo.fetch_secret("api").await.unwrap().unwrap();
         let pt2 = crypto2.decrypt(&rec2.name, &rec2.ciphertext).unwrap();
         assert_eq!(pt2, b"secret-token");
