@@ -98,21 +98,4 @@ impl Config {
 
         Ok(config_dir.join("devinventory").join("secrets.db"))
     }
-
-    pub fn generate_example_config() -> String {
-        let example = ConfigFile {
-            database: DatabaseConfig {
-                path: Some("/custom/path/to/secrets.db".to_string()),
-            },
-            keyring: KeyringConfig {
-                service: Some("devinventory".to_string()),
-                account: Some("dmk".to_string()),
-            },
-            logging: LoggingConfig {
-                level: Some("info".to_string()),
-            },
-        };
-
-        toml::to_string_pretty(&example).unwrap()
-    }
 }

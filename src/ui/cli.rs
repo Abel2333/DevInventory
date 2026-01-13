@@ -86,15 +86,7 @@ pub async fn run_cli(service: SecretService, command: Commands) -> Result<()> {
         Commands::List => {
             let metadata_list = service.list_secrets().await?;
 
-            let rows: Vec<SecretRow> = metadata_list
-                .into_iter()
-                .map(|m| SecretRow {
-                    name: m.name,
-                    kind: m.kind.unwrap_or_default(),
-                    created_at: m.created_at.to_rfc3339(),
-                    updated_at: m.updated_at.to_rfc3339(),
-                })
-                .collect();
+            let rows = SecretRow::from_metadata_list(metadata_list);
 
             let count = rows.len();
             let mut table = Table::new(rows);
@@ -107,15 +99,7 @@ pub async fn run_cli(service: SecretService, command: Commands) -> Result<()> {
         Commands::Search { query } => {
             let metadata_list = service.search_secrets(&query).await?;
 
-            let rows: Vec<SecretRow> = metadata_list
-                .into_iter()
-                .map(|m| SecretRow {
-                    name: m.name,
-                    kind: m.kind.unwrap_or_default(),
-                    created_at: m.created_at.to_rfc3339(),
-                    updated_at: m.updated_at.to_rfc3339(),
-                })
-                .collect();
+            let rows = SecretRow::from_metadata_list(metadata_list);
 
             info!("search_secrets '{}' -> {} rows", query, rows.len());
 

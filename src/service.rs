@@ -28,7 +28,13 @@ impl SecretService {
         let crypto_service = CryptoService::new(key_provider, true).await?;
         let master_key = crypto_service.master_key().clone();
 
-        Ok((Self { repo, crypto_service }, master_key))
+        Ok((
+            Self {
+                repo,
+                crypto_service,
+            },
+            master_key,
+        ))
     }
 
     pub fn new(repo: Repository, crypto_service: CryptoService) -> Self {
@@ -89,17 +95,7 @@ impl SecretService {
     /// List all secrets in Vec type
     pub async fn list_secrets(&self) -> Result<Vec<SecretMetadata>> {
         let secrets = self.repo.list_secrets().await?;
-        let metadata = secrets
-            .into_iter()
-            .map(|record| SecretMetadata {
-                id: record.id,
-                name: record.name,
-                kind: record.kind,
-                note: record.note,
-                created_at: record.created_at,
-                updated_at: record.updated_at,
-            })
-            .collect();
+        let metadata = secrets.into_iter().map(SecretMetadata::from).collect();
 
         Ok(metadata)
     }
@@ -110,14 +106,7 @@ impl SecretService {
 
         let searched_secrets = secrets
             .into_iter()
-            .map(|record| SecretMetadata {
-                id: record.id,
-                name: record.name,
-                kind: record.kind,
-                note: record.note,
-                created_at: record.created_at,
-                updated_at: record.updated_at,
-            })
+            .map(SecretMetadata::from)
             .collect();
 
         Ok(searched_secrets)

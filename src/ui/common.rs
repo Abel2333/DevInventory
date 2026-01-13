@@ -1,6 +1,6 @@
-use std::u8;
-
 use tabled::Tabled;
+
+use crate::domain::SecretMetadata;
 
 pub fn mask(plaintext: &[u8]) -> String {
     if plaintext.is_empty() {
@@ -25,4 +25,21 @@ pub struct SecretRow {
     pub kind: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl From<SecretMetadata> for SecretRow {
+    fn from(value: SecretMetadata) -> Self {
+        Self {
+            name: value.name,
+            kind: value.kind.unwrap_or_default(),
+            created_at: value.created_at.to_rfc3339(),
+            updated_at: value.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+impl SecretRow {
+    pub fn from_metadata_list(metadata_list: Vec<SecretMetadata>) -> Vec<Self> {
+        metadata_list.into_iter().map(Self::from).collect()
+    }
 }

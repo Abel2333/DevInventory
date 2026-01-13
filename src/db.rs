@@ -22,6 +22,10 @@ pub struct Repository {
     pool: Pool<Sqlite>,
 }
 
+fn parse_uuid_or_nil(value: &str) -> Uuid {
+    Uuid::parse_str(value).unwrap_or_else(|_| Uuid::nil())
+}
+
 impl Repository {
     pub async fn connect(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
@@ -29,7 +33,11 @@ impl Repository {
         }
         if !path.exists() {
             // Touch the file so SQLite doesn't fail with code 14 on some sandboxed FS.
-            OpenOptions::new().create(true).write(true).open(path)?;
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(path)?;
             info!("created new database file at {}", path.to_string_lossy());
         }
         let url = format!("sqlite://{}", path.to_string_lossy());
@@ -100,7 +108,7 @@ impl Repository {
         info!("upserted secret '{}'", name);
 
         Ok(SecretRecord {
-            id: Uuid::parse_str(row.get::<String, _>("id").as_str()).unwrap_or_else(|_| Uuid::nil()),
+            id: parse_uuid_or_nil(&row.get::<String, _>("id")),
             name: row.get("name"),
             kind,
             note,
@@ -123,7 +131,7 @@ impl Repository {
             if row.is_some() { "hit" } else { "miss" }
         );
         Ok(row.map(|r| SecretRecord {
-            id: Uuid::parse_str(r.get::<String, _>("id").as_str()).unwrap_or_else(|_| Uuid::nil()),
+            id: parse_uuid_or_nil(&r.get::<String, _>("id")),
             name: r.get("name"),
             kind: r.get("kind"),
             note: r.get("note"),
@@ -143,8 +151,7 @@ impl Repository {
         Ok(rows
             .into_iter()
             .map(|r| SecretRecord {
-                id: Uuid::parse_str(r.get::<String, _>("id").as_str())
-                    .unwrap_or_else(|_| Uuid::nil()),
+                id: parse_uuid_or_nil(&r.get::<String, _>("id")),
                 name: r.get("name"),
                 kind: r.get("kind"),
                 note: r.get("note"),
@@ -171,8 +178,7 @@ impl Repository {
         Ok(rows
             .into_iter()
             .map(|r| SecretRecord {
-                id: Uuid::parse_str(r.get::<String, _>("id").as_str())
-                    .unwrap_or_else(|_| Uuid::nil()),
+                id: parse_uuid_or_nil(&r.get::<String, _>("id")),
                 name: r.get("name"),
                 kind: r.get("kind"),
                 note: r.get("note"),
