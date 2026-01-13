@@ -6,6 +6,12 @@ use zeroize::Zeroize;
 #[derive(Clone)]
 pub struct MasterKey(pub(crate) [u8; 32]);
 
+impl MasterKey {
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
 impl Zeroize for MasterKey {
     fn zeroize(&mut self) {
         self.0.zeroize();

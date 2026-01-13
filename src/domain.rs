@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::db::SecretRecord;
+
 // Data after decryption
 #[derive(Debug, Clone)]
 pub struct Secret {
@@ -34,6 +36,19 @@ impl Secret {
             note: self.note.clone(),
             created_at: self.created_at,
             updated_at: self.updated_at,
+        }
+    }
+}
+
+impl From<SecretRecord> for SecretMetadata {
+    fn from(record: SecretRecord) -> Self {
+        Self {
+            id: record.id,
+            name: record.name,
+            kind: record.kind,
+            note: record.note,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
         }
     }
 }
