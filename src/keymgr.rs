@@ -1,18 +1,36 @@
+use std::env;
+
 use crate::crypto::MasterKey;
 use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose};
-use keyring::Entry;
-use log::{debug, info, warn};
+use log::{error, info};
 use rand::RngCore;
 use zeroize::Zeroize;
 
-const SERVICE: &str = "devinventory";
-const ACCOUNT: &str = "dmk";
+pub enum KeyResult {
+    Existing(MasterKey),
+    Generated(MasterKey),
+}
 
+impl KeyResult {
+    pub fn key(&self) -> &MasterKey {
+        match self {
+            Self::Existing(k) | Self::Generated(k) => k,
+        }
+    }
+
+    pub fn into_key(self) -> MasterKey {
+        match self {
+            Self::Existing(k) | Self::Generated(k) => k,
+        }
+    }
+}
+
+/// DMK only allowed from cli inline or env variable
 #[derive(Clone)]
 pub struct MasterKeySource {
     pub base64_inline: Option<String>,
-    pub allow_keyring: bool,
+    pub env_name: Option<String>,
 }
 
 pub struct MasterKeyProvider {
@@ -25,89 +43,45 @@ impl MasterKeyProvider {
     }
 
     /// Obtain existing master key. If `generate_if_missing` is true, will create a new key.
-    pub async fn obtain(&self, generate_if_missing: bool) -> Result<MasterKey> {
-        if let Some(k) = self
-            .src
-            .base64_inline
-            .as_ref()
-            .and_then(|b| decode_key(b).ok())
-        {
-            info!("master key provided inline");
-            return Ok(k);
+    pub fn obtain(&self, generate_if_missing: bool) -> Result<KeyResult> {
+        // Step 1. Try to get existing key
+        if let Some(b64) = self.src.base64_inline.as_ref() {
+            let key = decode_key(b64).context("invalid master key from --dmk")?;
+            info!("master key provided via CLI");
+            return Ok(KeyResult::Existing(key));
         }
 
-        if self.src.allow_keyring
-            && let Some(k) = self.read_keyring().unwrap_or_else(|e| {
-                warn!("keyring unavailable ({}); cannot load stored key", e);
-                None
-            })
-        {
-            info!("master key loaded from keyring");
-            return Ok(k);
+        if let Some(env_name) = self.src.env_name.as_ref() {
+            match env::var(env_name) {
+                Ok(val) => {
+                    let key =
+                        decode_key(&val).context("invalid master key in environment variable")?;
+                    info!("master key loaded from environment variable '{}'", env_name);
+                    return Ok(KeyResult::Existing(key));
+                }
+                Err(env::VarError::NotPresent) => {
+                    error!("environment variable '{}' not set", env_name);
+                }
+                Err(e) => {
+                    return Err(anyhow!(e).context("failed to read environment variable"));
+                }
+            }
         }
 
+        // Step 2. Try to generate key if allowed
         if !generate_if_missing {
-            return Err(anyhow!("master key not found; provide --dmk or run `init`"));
+            return Err(anyhow!(
+                "master key not found; provide --dmk or set env var"
+            ));
         }
 
-        let key = generate_key();
-        let encoded = general_purpose::STANDARD.encode(&key.0);
-        println!(
-            "Generated new master key (base64). Save this now: {}",
-            encoded
-        );
-        if self.src.allow_keyring {
-            match self.write_keyring(&encoded) {
-                Ok(_) => {
-                    info!("new master key written to keyring");
-                    println!("Stored in OS keyring under service '{SERVICE}' account '{ACCOUNT}'.");
-                }
-                Err(e) => {
-                    warn!("cannot write keyring: {e}; you must store the key manually");
-                    println!("Keyring not available; you must store the key yourself.");
-                }
-            }
-        } else {
-            println!("Not stored in keyring (--no-keyring). You must manage it manually.");
-        }
-        Ok(key)
+        info!("generated new master key");
+        Ok(KeyResult::Generated(generate_key()))
     }
 
-    pub async fn rotate(&self) -> Result<MasterKey> {
-        let key = generate_key();
-        let encoded = general_purpose::STANDARD.encode(&key.0);
-        println!("New master key (base64). Save immediately: {}", encoded);
-        if self.src.allow_keyring {
-            match self.write_keyring(&encoded) {
-                Ok(_) => {
-                    println!("Keyring updated.");
-                    info!("keyring updated during rotation");
-                }
-                Err(e) => {
-                    warn!("keyring update failed: {e}; keep this key safe manually");
-                    println!("Keyring update failed; you must store this new key yourself.");
-                }
-            }
-        }
-        Ok(key)
-    }
-
-    fn read_keyring(&self) -> Result<Option<MasterKey>> {
-        let entry = Entry::new(SERVICE, ACCOUNT)?;
-        match entry.get_password() {
-            Ok(value) => decode_key(&value).map(Some),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => {
-                debug!("keyring read error: {e:?}");
-                Err(anyhow!(e)).context("reading keyring")
-            }
-        }
-    }
-
-    fn write_keyring(&self, encoded: &str) -> Result<()> {
-        let entry = Entry::new(SERVICE, ACCOUNT)?;
-        entry.set_password(encoded).context("writing keyring")?;
-        Ok(())
+    pub fn rotate(&self) -> Result<KeyResult> {
+        info!("rotating master key");
+        Ok(KeyResult::Generated(generate_key()))
     }
 }
 

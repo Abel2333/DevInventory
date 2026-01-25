@@ -21,7 +21,11 @@ use ui::cli::Commands;
 
 /// Global arguments (can be used with any command)
 #[derive(Parser)]
-#[command(name = "devinventory", version, about = "Manage infrastructure secrets locally with encryption")]
+#[command(
+    name = "devinventory",
+    version,
+    about = "Manage infrastructure secrets locally with encryption"
+)]
 struct Args {
     /// Database path override
     #[arg(long, global = true)]
@@ -75,7 +79,8 @@ async fn main() -> Result<()> {
     repo.migrate().await?;
 
     let key_provider = MasterKeyProvider::new(config.master_key_source);
-    let crypto_service = CryptoService::new(&key_provider, false).await?;
+    let key_result = key_provider.obtain(false)?;
+    let crypto_service = CryptoService::new(key_result.into_key()).await?;
     let service = SecretService::new(repo, crypto_service);
 
     // 5. Run CLI

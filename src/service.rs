@@ -25,7 +25,9 @@ impl SecretService {
         repo.migrate().await?;
 
         // Generate new master key
-        let crypto_service = CryptoService::new(key_provider, true).await?;
+        // NOTE:The generated result should be show by UI
+        let key_result = key_provider.obtain(true)?;
+        let crypto_service = CryptoService::new(key_result.into_key()).await?;
         let master_key = crypto_service.master_key().clone();
 
         Ok((

@@ -1,6 +1,5 @@
 use crate::{
     crypto::{MasterKey, SecretCrypto},
-    keymgr::MasterKeyProvider,
 };
 use anyhow::Result;
 
@@ -9,8 +8,7 @@ pub struct CryptoService {
 }
 
 impl CryptoService {
-    pub async fn new(key_provider: &MasterKeyProvider, generate_new: bool) -> Result<Self> {
-        let master_key = key_provider.obtain(generate_new).await?;
+    pub async fn new(master_key: MasterKey) -> Result<Self> {
         Ok(Self { master_key })
     }
 
