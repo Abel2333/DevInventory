@@ -234,12 +234,12 @@ mod tests {
     use crate::crypto::MasterKey;
     use crate::crypto::SecretCrypto;
     use crate::db::Repository;
-    use std::path::PathBuf;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn repo_crud_and_rotate() {
-        // use in-memory sqlite to avoid filesystem writes in tests
-        let db_path = PathBuf::from(":memory:");
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("secrets.db");
 
         let repo = Repository::connect(&db_path).await.unwrap();
         repo.migrate().await.unwrap();

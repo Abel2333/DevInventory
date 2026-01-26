@@ -94,3 +94,129 @@ impl Config {
         Ok(config_dir.join("devinventory").join("secrets.db"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::sync::{Mutex, OnceLock};
+    use tempfile::TempDir;
+
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_MUTEX.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prev = env::var(key).ok();
+            unsafe {
+                env::set_var(key, value);
+            }
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(prev) = self.prev.as_ref() {
+                unsafe {
+                    env::set_var(self.key, prev);
+                }
+            } else {
+                unsafe {
+                    env::remove_var(self.key);
+                }
+            }
+        }
+    }
+
+    fn write_config(temp_dir: &TempDir, content: &str) -> Result<()> {
+        let cfg_dir = temp_dir.path().join("devinventory");
+        fs::create_dir_all(&cfg_dir)?;
+        fs::write(cfg_dir.join("config.toml"), content)?;
+        Ok(())
+    }
+
+    #[test]
+    fn build_prefers_cli_over_env_and_config() {
+        let _lock = env_lock();
+        let temp_dir = TempDir::new().unwrap();
+        let _cfg_home = EnvGuard::set("XDG_CONFIG_HOME", temp_dir.path().to_str().unwrap());
+        let _home = EnvGuard::set("HOME", temp_dir.path().to_str().unwrap());
+        let _appdata = EnvGuard::set("APPDATA", temp_dir.path().to_str().unwrap());
+        let env_db_path = temp_dir.path().join("env.db");
+        let _env_db = EnvGuard::set("DEVINVENTORY_DB_PATH", env_db_path.to_str().unwrap());
+
+        let cli_db_path = temp_dir.path().join("cli.db");
+
+        write_config(
+            &temp_dir,
+            r#"
+                [database]
+                path = "config.db"
+                [key]
+                env_name = "FROM_CONFIG"
+            "#,
+        )
+        .unwrap();
+
+        let master_key_source = MasterKeySource {
+            base64_inline: None,
+            env_name: None,
+        };
+        let config = Config::build(
+            Some(cli_db_path.clone()),
+            master_key_source,
+            Some("CLI_ENV".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(config.db_path, cli_db_path);
+        assert_eq!(
+            config.master_key_source.env_name.as_deref(),
+            Some("CLI_ENV")
+        );
+    }
+
+    #[test]
+    fn build_uses_env_then_config_then_default() {
+        let _lock = env_lock();
+        let temp_dir = TempDir::new().unwrap();
+        let _cfg_home = EnvGuard::set("XDG_CONFIG_HOME", temp_dir.path().to_str().unwrap());
+        let _home = EnvGuard::set("HOME", temp_dir.path().to_str().unwrap());
+        let _appdata = EnvGuard::set("APPDATA", temp_dir.path().to_str().unwrap());
+        let env_db_path = temp_dir.path().join("env.db");
+        let _env_db = EnvGuard::set("DEVINVENTORY_DB_PATH", env_db_path.to_str().unwrap());
+
+        write_config(
+            &temp_dir,
+            r#"
+                [database]
+                path = "config.db"
+                [key]
+                env_name = "FROM_CONFIG"
+            "#,
+        )
+        .unwrap();
+
+        let master_key_source = MasterKeySource {
+            base64_inline: None,
+            env_name: None,
+        };
+        let config = Config::build(None, master_key_source, None).unwrap();
+
+        assert_eq!(config.db_path, env_db_path);
+        assert_eq!(
+            config.master_key_source.env_name.as_deref(),
+            Some("FROM_CONFIG")
+        );
+    }
+}

@@ -127,3 +127,78 @@ impl SecretService {
         self.repo.reencrypt_all(&old_crypto, &new_crypto).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::MasterKey;
+    use crate::db::Repository;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn add_get_list_search_delete() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("secrets.db");
+        let repo = Repository::connect(&db_path).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let crypto = CryptoService::new(MasterKey([1u8; 32]));
+        let service = SecretService::new(repo, crypto);
+
+        service
+            .add_secret(
+                "api".to_string(),
+                b"secret-token".to_vec(),
+                Some("token".to_string()),
+                Some("prod".to_string()),
+            )
+            .await
+            .unwrap();
+
+        let secret = service.get_secret("api").await.unwrap();
+        assert_eq!(secret.plaintext, b"secret-token");
+
+        let list = service.list_secrets().await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "api");
+
+        let search = service.search_secrets("prod").await.unwrap();
+        assert_eq!(search.len(), 1);
+        assert_eq!(search[0].name, "api");
+
+        service.delete_secret("api").await.unwrap();
+        let list_after = service.list_secrets().await.unwrap();
+        assert!(list_after.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotate_master_key_allows_new_service_to_decrypt() {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("secrets.db");
+        let repo = Repository::connect(&db_path).await.unwrap();
+        repo.migrate().await.unwrap();
+
+        let crypto_old = CryptoService::new(MasterKey([1u8; 32]));
+        let service = SecretService::new(repo, crypto_old);
+
+        service
+            .add_secret(
+                "db".to_string(),
+                b"conn-string".to_vec(),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let crypto_new = CryptoService::new(MasterKey([2u8; 32]));
+        service.rotate_master_key(crypto_new).await.unwrap();
+
+        let repo2 = Repository::connect(&db_path).await.unwrap();
+        repo2.migrate().await.unwrap();
+        let service2 = SecretService::new(repo2, CryptoService::new(MasterKey([2u8; 32])));
+
+        let secret = service2.get_secret("db").await.unwrap();
+        assert_eq!(secret.plaintext, b"conn-string");
+    }
+}
