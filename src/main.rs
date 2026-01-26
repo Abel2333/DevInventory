@@ -66,10 +66,10 @@ async fn main() -> Result<()> {
     // 3. Handle Init command separately (it's a special initialization operation)
     if matches!(args.command, Commands::Init) {
         let key_provider = MasterKeyProvider::new(config.master_key_source.clone());
-        let (_service, master_key) = SecretService::init(&config.db_path, &key_provider).await?;
+        let result = app::init(&config.db_path, &key_provider).await?;
 
         // Display the result to the user
-        ui::display_init_result(&config, master_key)?;
+        ui::render_init_result(&result)?;
         info!("devinventory initialized successfully");
         return Ok(());
     }

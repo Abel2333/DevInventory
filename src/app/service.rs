@@ -1,44 +1,15 @@
 use crate::{
     crypto::CryptoService,
-    crypto::MasterKey,
     domain::{Secret, SecretMetadata},
     error::AppError,
-    keymgr::MasterKeyProvider,
     storage::Repository,
 };
-use std::path::Path;
-
 pub struct SecretService {
     repo: Repository,
     crypto_service: CryptoService,
 }
 
 impl SecretService {
-    /// Initialize a new devinventory project
-    /// Creates database, runs migrations, and generates a new master key
-    pub async fn init(
-        db_path: &Path,
-        key_provider: &MasterKeyProvider,
-    ) -> Result<(Self, MasterKey), AppError> {
-        // Create database and run migrations
-        let repo = Repository::connect(db_path).await?;
-        repo.migrate().await?;
-
-        // Generate new master key
-        // NOTE:The generated result should be show by UI
-        let key_result = key_provider.obtain(true)?;
-        let crypto_service = CryptoService::new(key_result.into_key());
-        let master_key = crypto_service.master_key().clone();
-
-        Ok((
-            Self {
-                repo,
-                crypto_service,
-            },
-            master_key,
-        ))
-    }
-
     pub fn new(repo: Repository, crypto_service: CryptoService) -> Self {
         Self {
             repo,
