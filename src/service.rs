@@ -27,7 +27,7 @@ impl SecretService {
         // Generate new master key
         // NOTE:The generated result should be show by UI
         let key_result = key_provider.obtain(true)?;
-        let crypto_service = CryptoService::new(key_result.into_key()).await?;
+        let crypto_service = CryptoService::new(key_result.into_key());
         let master_key = crypto_service.master_key().clone();
 
         Ok((
@@ -106,10 +106,7 @@ impl SecretService {
     pub async fn search_secrets(&self, query: &str) -> Result<Vec<SecretMetadata>> {
         let secrets = self.repo.search_secrets(query).await?;
 
-        let searched_secrets = secrets
-            .into_iter()
-            .map(SecretMetadata::from)
-            .collect();
+        let searched_secrets = secrets.into_iter().map(SecretMetadata::from).collect();
 
         Ok(searched_secrets)
     }

@@ -5,6 +5,7 @@ use crate::db::SecretRecord;
 
 // Data after decryption
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Secret {
     pub id: Uuid,
     pub name: String,
@@ -17,6 +18,7 @@ pub struct Secret {
 
 // Metadata without secretion
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SecretMetadata {
     pub id: Uuid,
     pub name: String,

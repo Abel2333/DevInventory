@@ -35,9 +35,9 @@ struct Args {
     #[arg(long, global = true)]
     dmk: Option<String>,
 
-    /// Don't use keyring
+    /// Environment variable name for master key
     #[arg(long, global = true)]
-    no_keyring: bool,
+    dmk_env: Option<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -58,10 +58,10 @@ async fn main() -> Result<()> {
     // 2. Build configuration
     let master_key_source = MasterKeySource {
         base64_inline: args.dmk,
-        allow_keyring: !args.no_keyring,
+        env_name: None,
     };
 
-    let config = Config::build(args.db_path, master_key_source)?;
+    let config = Config::build(args.db_path, master_key_source, args.dmk_env)?;
 
     // 3. Handle Init command separately (it's a special initialization operation)
     if matches!(args.command, Commands::Init) {
@@ -78,13 +78,18 @@ async fn main() -> Result<()> {
     let repo = Repository::connect(&config.db_path).await?;
     repo.migrate().await?;
 
-    let key_provider = MasterKeyProvider::new(config.master_key_source);
+    let key_provider = MasterKeyProvider::new(config.master_key_source.clone());
     let key_result = key_provider.obtain(false)?;
-    let crypto_service = CryptoService::new(key_result.into_key()).await?;
+    let crypto_service = CryptoService::new(key_result.into_key());
     let service = SecretService::new(repo, crypto_service);
 
     // 5. Run CLI
-    ui::run_cli(service, args.command).await?;
+    ui::run_cli(
+        service,
+        args.command,
+        config.master_key_source.env_name.clone(),
+    )
+    .await?;
 
     info!("devinventory CLI completed successfully");
     Ok(())

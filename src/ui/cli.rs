@@ -46,7 +46,11 @@ pub enum Commands {
     Rotate,
 }
 
-pub async fn run_cli(service: SecretService, command: Commands) -> Result<()> {
+pub async fn run_cli(
+    service: SecretService,
+    command: Commands,
+    env_name: Option<String>,
+) -> Result<()> {
     match command {
         Commands::Init => {
             unreachable!("Init command should be handled in main before service creation")
@@ -116,23 +120,27 @@ pub async fn run_cli(service: SecretService, command: Commands) -> Result<()> {
         Commands::Rotate => {
             println!("⚠️  Rotating master key...");
 
-            // 1. 创建新的密钥提供者（生成新密钥）
+            // 1. Create a new key provider (generate a new key)
             let new_key_provider = MasterKeyProvider::new(MasterKeySource {
                 base64_inline: None,
-                // WARN: Only for test
-                env_name: Some("Test".to_string()),
+                env_name,
             });
 
-            // 2. 创建新的 CryptoService（generate_new = true）
-            let key_result = new_key_provider.obtain(true)?;
-            let new_crypto_service = CryptoService::new(key_result.into_key()).await?;
+            // 2. Create a new CryptoService (generate new = true)
+            let key_result = new_key_provider.rotate()?;
 
-            // 3. 执行密钥轮换
+            println!(
+                "Generate new Master Key successfully, new key: {}",
+                key_result.key_b64()
+            );
+
+            let new_crypto_service = CryptoService::new(key_result.into_key());
+
+            // 3. Perform key rotation
             service.rotate_master_key(new_crypto_service).await?;
 
             println!("✅ Master key rotated successfully!");
-            println!("⚠️  New master key has been saved to your keyring");
-            println!("    If keyring is not available, please save the key printed above");
+            println!("Please save the key printed above");
         }
     }
 

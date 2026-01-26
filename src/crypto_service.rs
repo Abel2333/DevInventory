@@ -1,6 +1,4 @@
-use crate::{
-    crypto::{MasterKey, SecretCrypto},
-};
+use crate::crypto::{MasterKey, SecretCrypto};
 use anyhow::Result;
 
 pub struct CryptoService {
@@ -8,8 +6,8 @@ pub struct CryptoService {
 }
 
 impl CryptoService {
-    pub async fn new(master_key: MasterKey) -> Result<Self> {
-        Ok(Self { master_key })
+    pub fn new(master_key: MasterKey) -> Self {
+        Self { master_key }
     }
 
     /// Encrypt data

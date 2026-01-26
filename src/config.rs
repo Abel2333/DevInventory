@@ -10,7 +10,7 @@ pub struct ConfigFile {
     #[serde(default)]
     pub database: DatabaseConfig,
     #[serde(default)]
-    pub keyring: KeyringConfig,
+    pub key: KeyConfig,
     #[serde(default)]
     pub logging: LoggingConfig,
 }
@@ -21,9 +21,8 @@ pub struct DatabaseConfig {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct KeyringConfig {
-    pub service: Option<String>,
-    pub account: Option<String>,
+pub struct KeyConfig {
+    pub env_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -36,13 +35,15 @@ pub struct LoggingConfig {
 pub struct Config {
     pub db_path: PathBuf,
     pub master_key_source: MasterKeySource,
-    pub keyring_service: String,
-    pub keyring_account: String,
 }
 
 impl Config {
     /// Priority: CLI arg > env > config file > default value
-    pub fn build(cli_db_path: Option<PathBuf>, master_key_source: MasterKeySource) -> Result<Self> {
+    pub fn build(
+        cli_db_path: Option<PathBuf>,
+        mut master_key_source: MasterKeySource,
+        cli_env_name: Option<String>,
+    ) -> Result<Self> {
         let config_file = Self::load_config_file()?;
 
         let db_path = cli_db_path // CLI arguments
@@ -56,21 +57,15 @@ impl Config {
             )
             .unwrap_or_else(|| Self::default_db_path().unwrap());
 
-        let keyring_service = std::env::var("DEVINVENTORY_KEYRING_SERVICE")
-            .ok()
-            .or_else(|| config_file.keyring.service.clone())
-            .unwrap_or_else(|| "devinventory".to_string());
+        let env_name = cli_env_name
+            .or_else(|| config_file.key.env_name.clone())
+            .unwrap_or_else(|| "DEVINVENTORY_DMK".to_string());
 
-        let keyring_account = std::env::var("DEVINVENTORY_KEYRING_ACCOUNT")
-            .ok()
-            .or_else(|| config_file.keyring.account.clone())
-            .unwrap_or_else(|| "dmk".to_string());
+        master_key_source.env_name = Some(env_name);
 
         Ok(Self {
             db_path,
             master_key_source,
-            keyring_service,
-            keyring_account,
         })
     }
 

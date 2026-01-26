@@ -24,6 +24,12 @@ impl KeyResult {
             Self::Existing(k) | Self::Generated(k) => k,
         }
     }
+
+    pub fn key_b64(&self) -> String {
+        let key = self.key();
+
+        general_purpose::STANDARD.encode(key.as_bytes())
+    }
 }
 
 /// DMK only allowed from cli inline or env variable

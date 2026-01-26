@@ -21,14 +21,9 @@ pub fn display_init_result(config: &Config, master_key: MasterKey) -> Result<()>
     println!("    - Write it down and keep in a safe place");
     println!("    You will need it to access your secrets.\n");
 
-    if config.master_key_source.allow_keyring {
-        println!("✅ Master key saved to system keyring");
-        println!("   Service: {}", config.keyring_service);
-        println!("   Account: {}", config.keyring_account);
-    } else {
-        println!("ℹ️  Keyring disabled. Use --dmk to provide key in future commands:");
-        println!("   devinventory --dmk \"{}\" <command>", key_base64);
-    }
+    println!("ℹ️  Use --dmk or set an environment variable for future commands:");
+    println!("   devinventory --dmk \"{}\" <command>", key_base64);
+    println!("   export DEVINVENTORY_DMK=\"{}\"", key_base64);
 
     Ok(())
 }

@@ -3,13 +3,18 @@
 ## Features Implemented
 - Local SQLite datastore with automatic table creation and indexing.
 - Field-level encryption using ChaCha20-Poly1305; AAD binds to secret name.
-- Master key (32B) bootstrap: inline `--dmk`, keyring lookup, or generate+print once (optional `--no-keyring`).
+- Master key (32B) bootstrap: inline `--dmk`, environment variable, or generate+print once.
 - Secret commands: add/get/list/rm; masked output by default, `--show` to reveal.
-- Key rotation re-encrypts all secrets and updates keyring when allowed.
+- Key rotation re-encrypts all secrets and prints the new key once.
 
 ## Default Paths
 - DB: `~/.config/devinventory/devinventory.db` (override with `--db-path`).
-- Keyring entry: service `devinventory`, account `dmk` (skipped if `--no-keyring`).
+## Master Key Sources
+- CLI: `--dmk <BASE64>`
+- Environment variable: name defaults to `DEVINVENTORY_DMK`
+- Override env var name:
+  - CLI: `--dmk-env DEVINVENTORY_DMK`
+  - Config: `key.env_name = "DEVINVENTORY_DMK"`
 
 ## Common Commands
 - Add (prompted secret): `devinventory add api-token --kind token --note "prod"`
@@ -21,6 +26,7 @@
 - Rotate master key: `devinventory rotate`
 - Use custom DB path: `devinventory --db-path ./secrets.db list`
 - Headless DMK: `devinventory --dmk BASE64KEY add ...`
+- Headless DMK via env: `export DEVINVENTORY_DMK=BASE64KEY`
 
 ## Safety Defaults
 - Secrets never printed unless `--show`.
