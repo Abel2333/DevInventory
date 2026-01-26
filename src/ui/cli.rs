@@ -1,9 +1,11 @@
+mod common;
+
 use crate::{
-    crypto_service::CryptoService,
+    app::SecretService,
+    crypto::CryptoService,
     keymgr::{MasterKeyProvider, MasterKeySource},
-    service::SecretService,
-    ui::common::{SecretRow, mask},
 };
+use common::{SecretRow, mask};
 use anyhow::Result;
 use clap::Subcommand;
 use log::{info, warn};

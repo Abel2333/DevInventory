@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::db::SecretRecord;
+use crate::storage::SecretRecord;
 
 // Data after decryption
 #[derive(Debug, Clone)]

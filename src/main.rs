@@ -1,21 +1,20 @@
+mod app;
 mod config;
 mod crypto;
-mod crypto_service;
-mod db;
 mod domain;
 mod keymgr;
-mod service;
+mod storage;
 mod ui;
 
+use crate::app::SecretService;
+use crate::storage::Repository;
 use anyhow::Result;
 use clap::Parser;
 use config::Config;
-use crypto_service::CryptoService;
-use db::Repository;
+use crypto::CryptoService;
 use env_logger::Env;
 use keymgr::{MasterKeyProvider, MasterKeySource};
 use log::info;
-use service::SecretService;
 use std::path::PathBuf;
 use ui::cli::Commands;
 

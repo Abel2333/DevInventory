@@ -233,7 +233,7 @@ impl Repository {
 mod tests {
     use crate::crypto::MasterKey;
     use crate::crypto::SecretCrypto;
-    use crate::db::Repository;
+    use crate::storage::Repository;
     use tempfile::TempDir;
 
     #[tokio::test]

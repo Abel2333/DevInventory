@@ -1,9 +1,9 @@
 use crate::{
     crypto::MasterKey,
-    crypto_service::CryptoService,
-    db::Repository,
+    crypto::CryptoService,
     domain::{Secret, SecretMetadata},
     keymgr::MasterKeyProvider,
+    storage::Repository,
 };
 use anyhow::Result;
 use std::path::Path;
@@ -132,7 +132,7 @@ impl SecretService {
 mod tests {
     use super::*;
     use crate::crypto::MasterKey;
-    use crate::db::Repository;
+    use crate::storage::Repository;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -182,12 +182,7 @@ mod tests {
         let service = SecretService::new(repo, crypto_old);
 
         service
-            .add_secret(
-                "db".to_string(),
-                b"conn-string".to_vec(),
-                None,
-                None,
-            )
+            .add_secret("db".to_string(), b"conn-string".to_vec(), None, None)
             .await
             .unwrap();
 

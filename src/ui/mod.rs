@@ -1,5 +1,4 @@
 pub mod cli;
-pub mod common;
 
 pub use cli::run_cli;
 

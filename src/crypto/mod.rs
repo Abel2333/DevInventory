@@ -1,3 +1,7 @@
+pub mod service;
+
+pub use service::CryptoService;
+
 use anyhow::Result;
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, aead::Aead, aead::KeyInit};
 use rand::RngCore;
