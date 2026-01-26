@@ -1,4 +1,8 @@
-use anyhow::Result;
+pub mod service;
+
+pub use service::CryptoService;
+
+use crate::error::CryptoError;
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, aead::Aead, aead::KeyInit};
 use rand::RngCore;
 use zeroize::Zeroize;
@@ -33,7 +37,7 @@ impl SecretCrypto {
         Self { key }
     }
 
-    pub fn encrypt(&self, aad_label: &str, plaintext: &[u8]) -> Result<Vec<u8>> {
+    pub fn encrypt(&self, aad_label: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut nonce_bytes = [0u8; 12];
         let mut rng = rand::rng();
         rng.fill_bytes(&mut nonce_bytes);
@@ -48,7 +52,7 @@ impl SecretCrypto {
                     aad: &aad,
                 },
             )
-            .map_err(|e| anyhow::anyhow!(format!("encrypt failed: {e:?}")))?;
+            .map_err(|_| CryptoError::Encrypt)?;
         // store nonce || ciphertext
         let mut out = Vec::with_capacity(12 + ciphertext.len());
         out.extend_from_slice(&nonce_bytes);
@@ -57,9 +61,9 @@ impl SecretCrypto {
         Ok(out)
     }
 
-    pub fn decrypt(&self, aad_label: &str, blob: &[u8]) -> Result<Vec<u8>> {
+    pub fn decrypt(&self, aad_label: &str, blob: &[u8]) -> Result<Vec<u8>, CryptoError> {
         if blob.len() < 12 {
-            return Err(anyhow::anyhow!("ciphertext too short"));
+            return Err(CryptoError::CiphertextTooShort);
         }
         let (nonce_bytes, ct) = blob.split_at(12);
         let nonce = Nonce::from_slice(nonce_bytes);
@@ -72,7 +76,7 @@ impl SecretCrypto {
                     aad: aad_label.as_bytes(),
                 },
             )
-            .map_err(|e| anyhow::anyhow!(format!("decrypt failed: {e:?}")))?;
+            .map_err(|_| CryptoError::Decrypt)?;
         Ok(plaintext)
     }
 }

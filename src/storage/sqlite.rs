@@ -1,5 +1,5 @@
 use crate::crypto::SecretCrypto;
-use anyhow::{Context, Result};
+use crate::error::StorageError;
 use chrono::{DateTime, Utc};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
@@ -27,9 +27,9 @@ fn parse_uuid_or_nil(value: &str) -> Uuid {
 }
 
 impl Repository {
-    pub async fn connect(path: &Path) -> Result<Self> {
+    pub async fn connect(path: &Path) -> Result<Self, StorageError> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(StorageError::Io)?;
         }
         if !path.exists() {
             // Touch the file so SQLite doesn't fail with code 14 on some sandboxed FS.
@@ -37,7 +37,8 @@ impl Repository {
                 .create(true)
                 .truncate(true)
                 .write(true)
-                .open(path)?;
+                .open(path)
+                .map_err(StorageError::Io)?;
             info!("created new database file at {}", path.to_string_lossy());
         }
         let url = format!("sqlite://{}", path.to_string_lossy());
@@ -46,11 +47,11 @@ impl Repository {
             .max_connections(5)
             .connect(&url)
             .await
-            .context("connect sqlite")?;
+            .map_err(StorageError::Connect)?;
         Ok(Self { pool })
     }
 
-    pub async fn migrate(&self) -> Result<()> {
+    pub async fn migrate(&self) -> Result<(), StorageError> {
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS secrets (
@@ -65,10 +66,12 @@ impl Repository {
             "#,
         )
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(StorageError::Migrate)?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_secrets_kind ON secrets(kind);")
             .execute(&self.pool)
-            .await?;
+            .await
+            .map_err(StorageError::Migrate)?;
         debug!("database schema ensured");
         Ok(())
     }
@@ -79,7 +82,7 @@ impl Repository {
         kind: Option<String>,
         note: Option<String>,
         ciphertext: &[u8],
-    ) -> Result<SecretRecord> {
+    ) -> Result<SecretRecord, StorageError> {
         let id = Uuid::new_v4();
         let now = Utc::now();
 
@@ -103,7 +106,8 @@ impl Repository {
         .bind(now)
         .bind(now)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(StorageError::Query)?;
 
         info!("upserted secret '{}'", name);
 
@@ -118,13 +122,14 @@ impl Repository {
         })
     }
 
-    pub async fn fetch_secret(&self, name: &str) -> Result<Option<SecretRecord>> {
+    pub async fn fetch_secret(&self, name: &str) -> Result<Option<SecretRecord>, StorageError> {
         let row = sqlx::query(
             r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at FROM secrets WHERE name = ?1"#,
         )
         .bind(name)
         .fetch_optional(&self.pool)
-        .await?;
+        .await
+        .map_err(StorageError::Query)?;
         debug!(
             "fetch secret '{}' -> {}",
             name,
@@ -141,12 +146,13 @@ impl Repository {
         }))
     }
 
-    pub async fn list_secrets(&self) -> Result<Vec<SecretRecord>> {
+    pub async fn list_secrets(&self) -> Result<Vec<SecretRecord>, StorageError> {
         let rows = sqlx::query(
             r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at FROM secrets ORDER BY name"#
         )
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(StorageError::Query)?;
         debug!("list_secrets returned {} rows", rows.len());
         Ok(rows
             .into_iter()
@@ -163,7 +169,7 @@ impl Repository {
     }
 
     /// Search name/kind/note with a case-insensitive substring match.
-    pub async fn search_secrets(&self, query: &str) -> Result<Vec<SecretRecord>> {
+    pub async fn search_secrets(&self, query: &str) -> Result<Vec<SecretRecord>, StorageError> {
         let pattern = format!("%{}%", query.to_lowercase());
         let rows = sqlx::query(
             r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at
@@ -173,7 +179,8 @@ impl Repository {
         )
         .bind(pattern)
         .fetch_all(&self.pool)
-        .await?;
+        .await
+        .map_err(StorageError::Query)?;
         info!("search_secrets '{}' -> {} rows", query, rows.len());
         Ok(rows
             .into_iter()
@@ -189,11 +196,12 @@ impl Repository {
             .collect())
     }
 
-    pub async fn delete_secret(&self, name: &str) -> Result<bool> {
+    pub async fn delete_secret(&self, name: &str) -> Result<bool, StorageError> {
         let res = sqlx::query("DELETE FROM secrets WHERE name = ?1")
             .bind(name)
             .execute(&self.pool)
-            .await?;
+            .await
+            .map_err(StorageError::Query)?;
         debug!("delete_secret '{}' -> {}", name, res.rows_affected());
         Ok(res.rows_affected() > 0)
     }
@@ -202,11 +210,12 @@ impl Repository {
         &self,
         old_crypto: &SecretCrypto,
         new_crypto: &SecretCrypto,
-    ) -> Result<()> {
-        let mut tx = self.pool.begin().await?;
+    ) -> Result<(), StorageError> {
+        let mut tx = self.pool.begin().await.map_err(StorageError::Query)?;
         let rows = sqlx::query(r#"SELECT id, name, ciphertext FROM secrets"#)
             .fetch_all(&mut *tx)
-            .await?;
+            .await
+            .map_err(StorageError::Query)?;
         let total = rows.len();
 
         for row in rows {
@@ -214,16 +223,21 @@ impl Repository {
             let ct: Vec<u8> = row.get("ciphertext");
             let id: String = row.get("id");
 
-            let plaintext = old_crypto.decrypt(&name, &ct)?;
-            let new_ct = new_crypto.encrypt(&name, &plaintext)?;
+            let plaintext = old_crypto
+                .decrypt(&name, &ct)
+                .map_err(StorageError::Crypto)?;
+            let new_ct = new_crypto
+                .encrypt(&name, &plaintext)
+                .map_err(StorageError::Crypto)?;
             sqlx::query("UPDATE secrets SET ciphertext = ?1, updated_at = ?2 WHERE id = ?3")
                 .bind(new_ct)
                 .bind(Utc::now())
                 .bind(id)
                 .execute(&mut *tx)
-                .await?;
+                .await
+                .map_err(StorageError::Query)?;
         }
-        tx.commit().await?;
+        tx.commit().await.map_err(StorageError::Query)?;
         info!("re-encrypted {} secrets with new master key", total);
         Ok(())
     }
@@ -233,13 +247,13 @@ impl Repository {
 mod tests {
     use crate::crypto::MasterKey;
     use crate::crypto::SecretCrypto;
-    use crate::db::Repository;
-    use std::path::PathBuf;
+    use crate::storage::Repository;
+    use tempfile::TempDir;
 
     #[tokio::test]
     async fn repo_crud_and_rotate() {
-        // use in-memory sqlite to avoid filesystem writes in tests
-        let db_path = PathBuf::from(":memory:");
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("secrets.db");
 
         let repo = Repository::connect(&db_path).await.unwrap();
         repo.migrate().await.unwrap();

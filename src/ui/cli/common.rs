@@ -43,3 +43,42 @@ impl SecretRow {
         metadata_list.into_iter().map(Self::from).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn mask_handles_various_lengths() {
+        assert_eq!(mask(b""), "(empty)");
+        assert_eq!(mask(b"a"), "***");
+        assert_eq!(mask(b"ab"), "***");
+        assert_eq!(mask(b"abc"), "***");
+        assert_eq!(mask(b"abcd"), "ab***cd");
+        assert_eq!(mask(b"abcdef"), "ab***ef");
+    }
+
+    #[test]
+    fn secret_row_converts_metadata() {
+        let ts = Utc.with_ymd_and_hms(2024, 1, 2, 3, 4, 5).unwrap();
+        let metadata = SecretMetadata {
+            id: Uuid::new_v4(),
+            name: "api".to_string(),
+            kind: None,
+            note: None,
+            created_at: ts,
+            updated_at: ts,
+        };
+
+        let rows = SecretRow::from_metadata_list(vec![metadata]);
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.name, "api");
+        assert_eq!(row.kind, "");
+        assert_eq!(row.created_at, ts.to_rfc3339());
+        assert_eq!(row.updated_at, ts.to_rfc3339());
+    }
+}

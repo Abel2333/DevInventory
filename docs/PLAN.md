@@ -6,16 +6,16 @@ Design and implement secrets storage for DevInventory so service tokens/password
 ## Scope
 - CLI-only MVP; TUI/GUI reuse same core.
 - SQLite data store already in repo; add migrations and crypto wrapper.
-- Support two modes: (a) keyring-backed (default), (b) user-managed `--no-keyring` (print-once).
+- Support two modes: (a) inline `--dmk`, (b) environment variable (default name `DEVINVENTORY_DMK`).
 
 ## Milestones
 1) **Schema & migrations**
    - Add migrations for secrets table/columns and audit table.
    - Add `created_at/updated_at`, unique indexes.
 2) **Key management**
-   - Implement DMK bootstrap: load from keyring → else generate 32B random.
-   - Print-once flow with `--no-keyring`; warning + prompt to save.
+   - Implement DMK bootstrap: load from CLI/env → else generate 32B random (print once).
    - Support `--dmk <base64>` override for headless use.
+   - Support `--dmk-env <NAME>` and config `key.env_name` for env var name.
 3) **Crypto layer**
    - Build `Secret` wrapper: AEAD (AES-256-GCM or ChaCha20-Poly1305), random nonce, AAD includes record id/type.
    - Zeroize buffers after use; no Debug impl prints data.
