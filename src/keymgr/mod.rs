@@ -1,7 +1,6 @@
 use std::env;
 
-use crate::crypto::MasterKey;
-use anyhow::{Context, Result, anyhow};
+use crate::{crypto::MasterKey, error::KeyError};
 use base64::{Engine as _, engine::general_purpose};
 use log::{error, info};
 use rand::RngCore;
@@ -49,10 +48,10 @@ impl MasterKeyProvider {
     }
 
     /// Obtain existing master key. If `generate_if_missing` is true, will create a new key.
-    pub fn obtain(&self, generate_if_missing: bool) -> Result<KeyResult> {
+    pub fn obtain(&self, generate_if_missing: bool) -> Result<KeyResult, KeyError> {
         // Step 1. Try to get existing key
         if let Some(b64) = self.src.base64_inline.as_ref() {
-            let key = decode_key(b64).context("invalid master key from --dmk")?;
+            let key = decode_key(b64)?;
             info!("master key provided via CLI");
             return Ok(KeyResult::Existing(key));
         }
@@ -60,8 +59,7 @@ impl MasterKeyProvider {
         if let Some(env_name) = self.src.env_name.as_ref() {
             match env::var(env_name) {
                 Ok(val) => {
-                    let key =
-                        decode_key(&val).context("invalid master key in environment variable")?;
+                    let key = decode_key(&val)?;
                     info!("master key loaded from environment variable '{}'", env_name);
                     return Ok(KeyResult::Existing(key));
                 }
@@ -69,34 +67,32 @@ impl MasterKeyProvider {
                     error!("environment variable '{}' not set", env_name);
                 }
                 Err(e) => {
-                    return Err(anyhow!(e).context("failed to read environment variable"));
+                    return Err(KeyError::EnvVar(e));
                 }
             }
         }
 
         // Step 2. Try to generate key if allowed
         if !generate_if_missing {
-            return Err(anyhow!(
-                "master key not found; provide --dmk or set env var"
-            ));
+            return Err(KeyError::Missing);
         }
 
         info!("generated new master key");
         Ok(KeyResult::Generated(generate_key()))
     }
 
-    pub fn rotate(&self) -> Result<KeyResult> {
+    pub fn rotate(&self) -> Result<KeyResult, KeyError> {
         info!("rotating master key");
         Ok(KeyResult::Generated(generate_key()))
     }
 }
 
-fn decode_key(b64: &str) -> Result<MasterKey> {
+fn decode_key(b64: &str) -> Result<MasterKey, KeyError> {
     let mut bytes = general_purpose::STANDARD
         .decode(b64.trim())
-        .map_err(|_| anyhow!("invalid base64 master key"))?;
+        .map_err(KeyError::InvalidBase64)?;
     if bytes.len() != 32 {
-        return Err(anyhow!("master key must be 32 bytes"));
+        return Err(KeyError::InvalidLength(bytes.len()));
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
@@ -203,7 +199,7 @@ mod tests {
         });
 
         let err = provider.obtain(false).err().unwrap();
-        assert!(err.to_string().contains("master key not found"));
+        assert!(matches!(err, KeyError::Missing));
     }
 
     #[test]
@@ -217,7 +213,7 @@ mod tests {
         });
 
         let err = provider.obtain(false).err().unwrap();
-        assert!(err.to_string().contains("invalid master key"));
+        assert!(matches!(err, KeyError::InvalidBase64(_)));
     }
 
     #[test]

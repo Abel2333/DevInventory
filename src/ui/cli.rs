@@ -5,9 +5,9 @@ use crate::{
     crypto::CryptoService,
     keymgr::{MasterKeyProvider, MasterKeySource},
 };
-use common::{SecretRow, mask};
 use anyhow::Result;
 use clap::Subcommand;
+use common::{SecretRow, mask};
 use log::{info, warn};
 use rpassword::prompt_password;
 use tabled::{Table, settings::Style};

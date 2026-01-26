@@ -2,6 +2,7 @@ mod app;
 mod config;
 mod crypto;
 mod domain;
+mod error;
 mod keymgr;
 mod storage;
 mod ui;

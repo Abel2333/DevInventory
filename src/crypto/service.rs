@@ -1,5 +1,5 @@
 use crate::crypto::{MasterKey, SecretCrypto};
-use anyhow::Result;
+use crate::error::CryptoError;
 
 pub struct CryptoService {
     master_key: MasterKey,
@@ -11,14 +11,14 @@ impl CryptoService {
     }
 
     /// Encrypt data
-    pub fn encrypt(&self, name: &str, plaintext: &[u8]) -> Result<Vec<u8>> {
+    pub fn encrypt(&self, name: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let secret_crypto = SecretCrypto::new(self.master_key.clone());
 
         secret_crypto.encrypt(name, plaintext)
     }
 
     /// Decrypt data
-    pub fn decrypt(&self, name: &str, ciphertext: &[u8]) -> Result<Vec<u8>> {
+    pub fn decrypt(&self, name: &str, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let secret_crypto = SecretCrypto::new(self.master_key.clone());
 
         secret_crypto.decrypt(name, ciphertext)

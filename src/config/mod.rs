@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{self, Context, Result};
+use crate::error::ConfigError;
 use serde::{Deserialize, Serialize};
 
 use crate::keymgr::MasterKeySource;
@@ -43,7 +43,7 @@ impl Config {
         cli_db_path: Option<PathBuf>,
         mut master_key_source: MasterKeySource,
         cli_env_name: Option<String>,
-    ) -> Result<Self> {
+    ) -> Result<Self, ConfigError> {
         let config_file = Self::load_config_file()?;
 
         let db_path = cli_db_path // CLI arguments
@@ -69,27 +69,26 @@ impl Config {
         })
     }
 
-    fn load_config_file() -> Result<ConfigFile> {
+    fn load_config_file() -> Result<ConfigFile, ConfigError> {
         let config_path = Self::config_file_path()?;
 
         if !config_path.exists() {
             return Ok(ConfigFile::default());
         }
 
-        let content =
-            std::fs::read_to_string(&config_path).context("Failed to read config file")?;
+        let content = std::fs::read_to_string(&config_path).map_err(ConfigError::Read)?;
 
-        toml::from_str(&content).context("Failed to parse config file")
+        toml::from_str(&content).map_err(ConfigError::Parse)
     }
 
-    pub fn config_file_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir().context("Cannot determine user config directory")?;
+    pub fn config_file_path() -> Result<PathBuf, ConfigError> {
+        let config_dir = dirs::config_dir().ok_or(ConfigError::ConfigDir)?;
 
         Ok(config_dir.join("devinventory").join("config.toml"))
     }
 
-    fn default_db_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir().context("Cannot determine user config directory")?;
+    fn default_db_path() -> Result<PathBuf, ConfigError> {
+        let config_dir = dirs::config_dir().ok_or(ConfigError::ConfigDir)?;
 
         Ok(config_dir.join("devinventory").join("secrets.db"))
     }
@@ -138,7 +137,7 @@ mod tests {
         }
     }
 
-    fn write_config(temp_dir: &TempDir, content: &str) -> Result<()> {
+    fn write_config(temp_dir: &TempDir, content: &str) -> std::io::Result<()> {
         let cfg_dir = temp_dir.path().join("devinventory");
         fs::create_dir_all(&cfg_dir)?;
         fs::write(cfg_dir.join("config.toml"), content)?;

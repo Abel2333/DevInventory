@@ -1,11 +1,11 @@
 use crate::{
-    crypto::MasterKey,
     crypto::CryptoService,
+    crypto::MasterKey,
     domain::{Secret, SecretMetadata},
+    error::AppError,
     keymgr::MasterKeyProvider,
     storage::Repository,
 };
-use anyhow::Result;
 use std::path::Path;
 
 pub struct SecretService {
@@ -19,7 +19,7 @@ impl SecretService {
     pub async fn init(
         db_path: &Path,
         key_provider: &MasterKeyProvider,
-    ) -> Result<(Self, MasterKey)> {
+    ) -> Result<(Self, MasterKey), AppError> {
         // Create database and run migrations
         let repo = Repository::connect(db_path).await?;
         repo.migrate().await?;
@@ -52,7 +52,7 @@ impl SecretService {
         value: Vec<u8>,
         kind: Option<String>,
         note: Option<String>,
-    ) -> Result<Secret> {
+    ) -> Result<Secret, AppError> {
         let ciphertext = self.crypto_service.encrypt(&name, &value)?;
 
         let record = self
@@ -72,11 +72,11 @@ impl SecretService {
     }
 
     /// Acquire the secret key
-    pub async fn get_secret(&self, name: &str) -> Result<Secret> {
+    pub async fn get_secret(&self, name: &str) -> Result<Secret, AppError> {
         let record = if let Some(record) = self.repo.fetch_secret(name).await? {
             record
         } else {
-            return Err(anyhow::anyhow!("secret not found"));
+            return Err(AppError::NotFound(name.to_string()));
         };
 
         let plaintext = self
@@ -95,7 +95,7 @@ impl SecretService {
     }
 
     /// List all secrets in Vec type
-    pub async fn list_secrets(&self) -> Result<Vec<SecretMetadata>> {
+    pub async fn list_secrets(&self) -> Result<Vec<SecretMetadata>, AppError> {
         let secrets = self.repo.list_secrets().await?;
         let metadata = secrets.into_iter().map(SecretMetadata::from).collect();
 
@@ -103,7 +103,7 @@ impl SecretService {
     }
 
     /// Search Secrets
-    pub async fn search_secrets(&self, query: &str) -> Result<Vec<SecretMetadata>> {
+    pub async fn search_secrets(&self, query: &str) -> Result<Vec<SecretMetadata>, AppError> {
         let secrets = self.repo.search_secrets(query).await?;
 
         let searched_secrets = secrets.into_iter().map(SecretMetadata::from).collect();
@@ -112,19 +112,23 @@ impl SecretService {
     }
 
     /// Delete Secret
-    pub async fn delete_secret(&self, name: &str) -> Result<()> {
+    pub async fn delete_secret(&self, name: &str) -> Result<(), AppError> {
         self.repo.delete_secret(name).await?;
 
         Ok(())
     }
 
     /// Change the Master Key
-    pub async fn rotate_master_key(&self, new_crypto_service: CryptoService) -> Result<()> {
+    pub async fn rotate_master_key(
+        &self,
+        new_crypto_service: CryptoService,
+    ) -> Result<(), AppError> {
         // Create SecretCrypto instructions
         let old_crypto = self.crypto_service.create_secret_crypto();
         let new_crypto = new_crypto_service.create_secret_crypto();
 
-        self.repo.reencrypt_all(&old_crypto, &new_crypto).await
+        self.repo.reencrypt_all(&old_crypto, &new_crypto).await?;
+        Ok(())
     }
 }
 
