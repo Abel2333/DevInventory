@@ -81,7 +81,7 @@ crossterm = { version = "0.27", optional = true }
 2. **Migrate CLI Binary**
    - Move `src/main.rs` → `src/bin/cli.rs`
    - Update imports: `use crate::` → `use devinventory::`
-   - Update `Cargo.toml` with `[lib]` and `[[bin]]` definitions
+   - Update `Cargo.toml` to add `[lib]` and `[[bin]]` definitions (and set package name to lowercase `devinventory` if renaming)
    - Verify: `cargo run --bin devinventory-cli` works identically to previous `cargo run`
 
 3. **Feature Flag Setup**
