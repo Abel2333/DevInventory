@@ -1,23 +1,18 @@
-mod app;
-mod config;
-mod crypto;
-mod domain;
-mod error;
-mod keymgr;
-mod storage;
-mod ui;
-
-use crate::app::SecretService;
-use crate::storage::Repository;
 use anyhow::Result;
 use clap::Parser;
-use config::Config;
-use crypto::CryptoService;
+use devinventory::{
+    app,
+    app::SecretService,
+    config::Config,
+    crypto::CryptoService,
+    keymgr::{MasterKeyProvider, MasterKeySource},
+    storage::Repository,
+    ui,
+    ui::cli::Commands,
+};
 use env_logger::Env;
-use keymgr::{MasterKeyProvider, MasterKeySource};
 use log::info;
 use std::path::PathBuf;
-use ui::cli::Commands;
 
 /// Global arguments (can be used with any command)
 #[derive(Parser)]
