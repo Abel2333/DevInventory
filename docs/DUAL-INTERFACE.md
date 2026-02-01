@@ -262,6 +262,22 @@ develop (integration)
 - [ ] Clean terminal restoration on all exit paths (normal, error, panic)
 - [ ] Documentation updated with TUI usage examples
 
+## 6.1 TUI Style Sketch (Text Mockup)
+
+Table-first layout with right-side preview. This is an ASCII sketch, not final UI.
+
+```
+DevInventory                     env: prod  db: ~/.devinv.db
+─────────────────────────────────────────────────────────
+ Name                 Type      Updated        │ Preview
+> prod/aws/root       key       2026-01-31     │ Name: prod/aws/root
+  prod/aws/readonly   key       2026-01-28     │ Type: key
+  prod/github/token   token     2026-01-12     │ Updated: 2026-01-31
+  staging/db/password secret    2025-12-30     │ Tags: aws, prod
+─────────────────────────────────────────────────────────
+ / search   Tab focus   Enter open   q quit
+```
+
 ## 7. Appendix: Migration Checklist
 
 **Pre-Migration:**
