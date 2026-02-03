@@ -1,17 +1,13 @@
 use std::{
     io::{self, Stdout, stdout},
     sync::Once,
-    time::Duration,
 };
 
 use crossterm::{
-    event::{self, Event},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, prelude::CrosstermBackend};
-
-use crate::ui::tui::{commands::Command, events::map_key};
 
 static PANIC_HOOK: Once = Once::new();
 
@@ -43,15 +39,4 @@ pub fn restore() -> io::Result<()> {
     disable_raw_mode()?;
 
     Ok(())
-}
-
-pub fn poll_event(timeout: Duration) -> io::Result<Command> {
-    if event::poll(timeout)? {
-        match event::read()? {
-            Event::Key(k) => Ok(map_key(k)),
-            _ => Ok(Command::None),
-        }
-    } else {
-        Ok(Command::Tick)
-    }
 }
