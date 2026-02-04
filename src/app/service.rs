@@ -2,7 +2,7 @@ use crate::{
     crypto::CryptoService,
     domain::{Secret, SecretMetadata},
     error::AppError,
-    storage::Repository,
+    storage::{Repository, SecretRecord},
 };
 pub struct SecretService {
     repo: Repository,
@@ -42,14 +42,29 @@ impl SecretService {
         })
     }
 
-    /// Acquire the secret key
-    pub async fn get_secret(&self, name: &str) -> Result<Secret, AppError> {
+    /// Acquire the secret by id
+    pub async fn get_secret(&self, id: uuid::Uuid) -> Result<Secret, AppError> {
+        let record = if let Some(record) = self.repo.fetch_secret_by_id(id).await? {
+            record
+        } else {
+            return Err(AppError::NotFound(id.to_string()));
+        };
+
+        self.secret_from_record(record)
+    }
+
+    /// Acquire the secret by name (CLI convenience)
+    pub async fn get_secret_by_name(&self, name: &str) -> Result<Secret, AppError> {
         let record = if let Some(record) = self.repo.fetch_secret(name).await? {
             record
         } else {
             return Err(AppError::NotFound(name.to_string()));
         };
 
+        self.secret_from_record(record)
+    }
+
+    fn secret_from_record(&self, record: SecretRecord) -> Result<Secret, AppError> {
         let plaintext = self
             .crypto_service
             .decrypt(&record.name, &record.ciphertext)?;
@@ -120,7 +135,7 @@ mod tests {
         let crypto = CryptoService::new(MasterKey([1u8; 32]));
         let service = SecretService::new(repo, crypto);
 
-        service
+        let added = service
             .add_secret(
                 "api".to_string(),
                 b"secret-token".to_vec(),
@@ -130,7 +145,7 @@ mod tests {
             .await
             .unwrap();
 
-        let secret = service.get_secret("api").await.unwrap();
+        let secret = service.get_secret(added.id).await.unwrap();
         assert_eq!(secret.plaintext, b"secret-token");
 
         let list = service.list_secrets().await.unwrap();
@@ -156,7 +171,7 @@ mod tests {
         let crypto_old = CryptoService::new(MasterKey([1u8; 32]));
         let service = SecretService::new(repo, crypto_old);
 
-        service
+        let added = service
             .add_secret("db".to_string(), b"conn-string".to_vec(), None, None)
             .await
             .unwrap();
@@ -168,7 +183,7 @@ mod tests {
         repo2.migrate().await.unwrap();
         let service2 = SecretService::new(repo2, CryptoService::new(MasterKey([2u8; 32])));
 
-        let secret = service2.get_secret("db").await.unwrap();
+        let secret = service2.get_secret(added.id).await.unwrap();
         assert_eq!(secret.plaintext, b"conn-string");
     }
 }

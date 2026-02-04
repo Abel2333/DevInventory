@@ -78,7 +78,7 @@ pub async fn run_cli(
         }
 
         Commands::Get { name, show } => {
-            let secret = service.get_secret(&name).await?;
+            let secret = service.get_secret_by_name(&name).await?;
 
             if show {
                 warn!("secret '{}' printed in plaintext", name);

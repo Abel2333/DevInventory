@@ -146,6 +146,33 @@ impl Repository {
         }))
     }
 
+    pub async fn fetch_secret_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<SecretRecord>, StorageError> {
+        let row = sqlx::query(
+            r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at FROM secrets WHERE id = ?1"#,
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(StorageError::Query)?;
+        debug!(
+            "fetch secret id '{}' -> {}",
+            id,
+            if row.is_some() { "hit" } else { "miss" }
+        );
+        Ok(row.map(|r| SecretRecord {
+            id: parse_uuid_or_nil(&r.get::<String, _>("id")),
+            name: r.get("name"),
+            kind: r.get("kind"),
+            note: r.get("note"),
+            ciphertext: r.get("ciphertext"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
+        }))
+    }
+
     pub async fn list_secrets(&self) -> Result<Vec<SecretRecord>, StorageError> {
         let rows = sqlx::query(
             r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at FROM secrets ORDER BY name"#
