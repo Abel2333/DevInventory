@@ -102,6 +102,14 @@ impl AppState {
         }
     }
 
+    pub fn prepare_edit_form(&mut self, secret: &Secret) {
+        self.form = Some(SecretForm::from_secret(secret));
+    }
+
+    pub fn clear_form(&mut self) {
+        self.form = None;
+    }
+
     fn transition(state: Mode, cmd: Command) -> Mode {
         match (state, cmd) {
             // From `List`
@@ -178,16 +186,11 @@ impl AppState {
             (Mode::List, Command::Add) => {
                 self.form = Some(SecretForm::default());
             }
-            // TODO: Here should change to edit Secret rather than SecretMetadata
             (Mode::List, Command::Edit) => {
-                if let Some(meta) = self.selected_metadata() {
-                    self.form = Some(SecretForm {
-                        id: Some(meta.id),
-                        name: meta.name.clone(),
-                        kind: meta.kind.clone(),
-                        note: meta.note.clone(),
-                        ..Default::default()
-                    });
+                if self.form.is_none() {
+                    self.status = Some("Edit not ready: form not prepared".to_string());
+                    // stay in List, do NOT transition
+                    return;
                 }
             }
             (Mode::List, Command::Delete) => {
