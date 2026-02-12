@@ -194,7 +194,7 @@ impl AppState {
                 }
             }
             (Mode::List, Command::Delete) => {
-                self.pending_delete_id = self.selected_metadata().map(|m| m.id);
+                self.pending_delete_id = self.selected_id();
             }
             (Mode::Search, Command::SearchInput(c)) => {
                 self.search_query.push(*c);
@@ -293,5 +293,9 @@ impl AppState {
         };
 
         index.and_then(|i| self.secrets.get(i))
+    }
+
+    pub fn selected_id(&self) -> Option<Uuid> {
+        self.selected_metadata().map(|m| m.id)
     }
 }

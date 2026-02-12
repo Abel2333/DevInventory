@@ -2,7 +2,11 @@ use ratatui::prelude::Frame;
 
 use crate::{
     app::SecretService,
-    ui::tui::{commands::Command, state::AppState},
+    error::AppError,
+    ui::tui::{
+        commands::Command,
+        state::{AppState, Mode, SecretForm},
+    },
 };
 
 pub struct TuiApp {
@@ -26,9 +30,60 @@ impl TuiApp {
     }
 
     /// Route a high-level Command into state changes and side effects.
-    pub fn on_command(&mut self, _command: Command) {
+    pub async fn on_command(&mut self, _command: Command) -> Result<(), AppError> {
         // TODO: update AppState based on command and trigger service calls.
-        todo!();
+        match (self.state.mode, &_command) {
+            (Mode::List, Command::Edit) => {
+                let Some(id) = self.state.selected_id() else {
+                    self.state.status = Some("No item selected".to_string());
+                    return Ok(());
+                };
+                let secret_item = self.service.get_secret(id).await?;
+                self.state.form = Some(SecretForm::from_secret(&secret_item));
+            }
+            (Mode::EditForm, Command::Back) => {
+                self.state.form = None;
+            }
+            (Mode::ConfirmDelete, Command::Confirm) => {
+                let Some(id) = self.state.pending_delete_id else {
+                    self.state.status = Some("No item selected".to_string());
+                    return Ok(());
+                };
+                self.service.delete_secret(id).await?;
+            }
+            (Mode::List, Command::Open) => {
+                let Some(id) = self.state.selected_id() else {
+                    self.state.status = Some("No item selected".to_string());
+                    return Ok(());
+                };
+
+                self.state.current_secret = Some(self.service.get_secret(id).await?);
+            }
+            (Mode::AddForm, Command::Confirm) => {
+                let Some(form) = self.state.form.as_ref() else {
+                    self.state.status = Some("No form data".to_string());
+                    return Ok(());
+                };
+                if form.name.trim().is_empty() {
+                    self.state.status = Some("Name cannot be empty".to_string());
+                    return Ok(());
+                }
+
+                self.service
+                    .add_secret(
+                        form.name.clone(),
+                        form.plaintext.as_bytes().to_vec(),
+                        form.kind.clone(),
+                        form.note.clone(),
+                    )
+                    .await?;
+
+                self.state.status = Some("Saved".to_string());
+            }
+            _ => {}
+        }
+        self.state.update(_command);
+        Ok(())
     }
 
     /// Advance time-based behaviors (tick) like animations or polling.

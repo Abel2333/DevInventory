@@ -223,13 +223,13 @@ impl Repository {
             .collect())
     }
 
-    pub async fn delete_secret(&self, name: &str) -> Result<bool, StorageError> {
-        let res = sqlx::query("DELETE FROM secrets WHERE name = ?1")
-            .bind(name)
+    pub async fn delete_secret(&self, id: Uuid) -> Result<bool, StorageError> {
+        let res = sqlx::query("DELETE FROM secrets WHERE id = ?1")
+            .bind(id.to_string())
             .execute(&self.pool)
             .await
             .map_err(StorageError::Query)?;
-        debug!("delete_secret '{}' -> {}", name, res.rows_affected());
+        debug!("delete_secret '{}' -> {}", id, res.rows_affected());
         Ok(res.rows_affected() > 0)
     }
 
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(pt2, b"secret-token");
 
         // delete
-        assert!(repo.delete_secret("api").await.unwrap());
+        assert!(repo.delete_secret(rec.id).await.unwrap());
         assert!(repo.fetch_secret("api").await.unwrap().is_none());
     }
 }

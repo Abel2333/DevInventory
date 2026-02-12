@@ -115,7 +115,8 @@ pub async fn run_cli(
         }
 
         Commands::Rm { name } => {
-            service.delete_secret(&name).await?;
+            let secret = service.get_secret_by_name(&name).await?;
+            service.delete_secret(secret.id).await?;
             println!("✅ deleted: {}", name);
         }
 

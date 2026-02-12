@@ -98,8 +98,8 @@ impl SecretService {
     }
 
     /// Delete Secret
-    pub async fn delete_secret(&self, name: &str) -> Result<(), AppError> {
-        self.repo.delete_secret(name).await?;
+    pub async fn delete_secret(&self, id: uuid::Uuid) -> Result<(), AppError> {
+        self.repo.delete_secret(id).await?;
 
         Ok(())
     }
@@ -156,7 +156,7 @@ mod tests {
         assert_eq!(search.len(), 1);
         assert_eq!(search[0].name, "api");
 
-        service.delete_secret("api").await.unwrap();
+        service.delete_secret(added.id).await.unwrap();
         let list_after = service.list_secrets().await.unwrap();
         assert!(list_after.is_empty());
     }
