@@ -1,3 +1,15 @@
+//! Side-effect coordinator for the TUI.
+//!
+//! Boundary rules:
+//! - Call `SecretService` and update `AppState` data fields with results.
+//! - Do not decide or mutate `mode` directly.
+//! - Always delegate transitions to `AppState::update`.
+//!
+//! Examples:
+//! - On `Command::Open`, fetch the selected secret and set `state.current_secret`,
+//!   then call `state.update(Command::Open)`.
+//! - On `Command::Confirm` in `AddForm`, call `service.add_secret(...)`,
+//!   set a success status, then call `state.update(Command::Confirm)`.
 use ratatui::prelude::Frame;
 
 use crate::{

@@ -1,3 +1,16 @@
+//! Pure state transitions for the TUI.
+//!
+//! Boundary rules:
+//! - Only update in-memory `AppState` fields.
+//! - No service calls, no database access, no terminal I/O.
+//! - All mode changes must happen here via `transition` + `update`.
+//!
+//! Examples:
+//! - `(Mode::List, Command::MoveDown)` updates `list_index` and scroll offsets.
+//! - `(Mode::Search, Command::SearchInput('a'))` updates `search_query`
+//!   and `filtered_indices`.
+//! - `(Mode::List, Command::Open)` should only change `mode` (after validation),
+//!   while `app` handles loading the selected secret.
 use std::time::Instant;
 
 use uuid::Uuid;

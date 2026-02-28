@@ -1,3 +1,13 @@
+//! Input mapping only: terminal events -> `Command`.
+//!
+//! Boundary rules:
+//! - Do not read or mutate `AppState`.
+//! - Do not call services or perform I/O beyond reading terminal events.
+//! - Keep mappings deterministic (no hidden state).
+//!
+//! Example:
+//! - `KeyCode::Char('q')` -> `Command::Quit`
+//! - `KeyCode::Char(c)` -> `Command::SearchInput(c)`
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use std::{
     io,
