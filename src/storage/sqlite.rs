@@ -122,6 +122,50 @@ impl Repository {
         })
     }
 
+    pub async fn update_secret(
+        &self,
+        id: Uuid,
+        name: &str,
+        kind: Option<String>,
+        note: Option<String>,
+        ciphertext: &[u8],
+    ) -> Result<SecretRecord, StorageError> {
+        let now = Utc::now();
+
+        let row = sqlx::query(
+            r#"
+          UPDATE secrets
+          SET
+              name = ?2,
+              kind = ?3,
+              note = ?4,
+              ciphertext = ?5,
+              updated_at = ?6
+          WHERE id = ?1
+          RETURNING *
+          "#,
+        )
+        .bind(id.to_string())
+        .bind(name)
+        .bind(&kind)
+        .bind(&note)
+        .bind(ciphertext)
+        .bind(now)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(StorageError::Query)?;
+
+        Ok(SecretRecord {
+            id: parse_uuid_or_nil(&row.get::<String, _>("id")),
+            name: row.get("name"),
+            kind: row.get("kind"),
+            note: row.get("note"),
+            ciphertext: row.get("ciphertext"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+
     pub async fn fetch_secret(&self, name: &str) -> Result<Option<SecretRecord>, StorageError> {
         let row = sqlx::query(
             r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at FROM secrets WHERE name = ?1"#,
@@ -146,10 +190,7 @@ impl Repository {
         }))
     }
 
-    pub async fn fetch_secret_by_id(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<SecretRecord>, StorageError> {
+    pub async fn fetch_secret_by_id(&self, id: Uuid) -> Result<Option<SecretRecord>, StorageError> {
         let row = sqlx::query(
             r#"SELECT id, name, kind, note, ciphertext, created_at, updated_at FROM secrets WHERE id = ?1"#,
         )

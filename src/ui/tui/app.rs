@@ -17,6 +17,7 @@ use crate::{
     error::AppError,
     ui::tui::{
         commands::Command,
+        events::RawCommand,
         state::{AppState, Mode, SecretForm},
     },
 };
@@ -42,59 +43,139 @@ impl TuiApp {
     }
 
     /// Route a high-level Command into state changes and side effects.
-    pub async fn on_command(&mut self, _command: Command) -> Result<(), AppError> {
+    pub async fn on_command(&mut self, command: Command) -> Result<(), AppError> {
         // TODO: update AppState based on command and trigger service calls.
-        match (self.state.mode, &_command) {
-            (Mode::List, Command::Edit) => {
+        match (self.state.mode, &command) {
+            (Mode::List, Command::OpenDetail) => {
                 let Some(id) = self.state.selected_id() else {
                     self.state.status = Some("No item selected".to_string());
                     return Ok(());
                 };
-                let secret_item = self.service.get_secret(id).await?;
-                self.state.form = Some(SecretForm::from_secret(&secret_item));
+                match self.service.get_secret(id).await {
+                    Ok(secret) => {
+                        self.state.current_secret = Some(secret);
+                    }
+                    Err(err) => {
+                        self.state.status = Some(err.to_string());
+                        return Ok(());
+                    }
+                }
             }
-            (Mode::EditForm, Command::Back) => {
-                self.state.form = None;
-            }
-            (Mode::ConfirmDelete, Command::Confirm) => {
-                let Some(id) = self.state.pending_delete_id else {
-                    self.state.status = Some("No item selected".to_string());
-                    return Ok(());
-                };
-                self.service.delete_secret(id).await?;
-            }
-            (Mode::List, Command::Open) => {
+            (Mode::List, Command::StartEdit) => {
                 let Some(id) = self.state.selected_id() else {
                     self.state.status = Some("No item selected".to_string());
                     return Ok(());
                 };
 
-                self.state.current_secret = Some(self.service.get_secret(id).await?);
+                match self.service.get_secret(id).await {
+                    Ok(secret) => {
+                        self.state.form = Some(SecretForm::from_secret(&secret));
+                    }
+                    Err(err) => {
+                        self.state.status = Some(err.to_string());
+                        return Ok(());
+                    }
+                }
             }
             (Mode::AddForm, Command::Confirm) => {
                 let Some(form) = self.state.form.as_ref() else {
                     self.state.status = Some("No form data".to_string());
                     return Ok(());
                 };
+
                 if form.name.trim().is_empty() {
                     self.state.status = Some("Name cannot be empty".to_string());
                     return Ok(());
                 }
 
-                self.service
+                match self
+                    .service
                     .add_secret(
                         form.name.clone(),
                         form.plaintext.as_bytes().to_vec(),
                         form.kind.clone(),
                         form.note.clone(),
                     )
-                    .await?;
+                    .await
+                {
+                    Ok(_) => {
+                        self.state.status = Some("Saved".to_string());
+                        self.sync_from_service().await;
+                    }
+                    Err(err) => {
+                        self.state.status = Some(err.to_string());
+                        return Ok(());
+                    }
+                }
+            }
 
-                self.state.status = Some("Saved".to_string());
+            (Mode::EditForm, Command::Confirm) => {
+                let Some(form) = self.state.form.as_ref() else {
+                    self.state.status = Some("No form data".to_string());
+                    return Ok(());
+                };
+
+                if form.name.trim().is_empty() {
+                    self.state.status = Some("Name cannot be empty".to_string());
+                    return Ok(());
+                }
+
+                let Some(id) = form.id else {
+                    self.state.status = Some("Missing secret id".to_string());
+                    return Ok(());
+                };
+
+                match self
+                    .service
+                    .update_secret(
+                        id,
+                        form.name.clone(),
+                        form.plaintext.as_bytes().to_vec(),
+                        form.kind.clone(),
+                        form.note.clone(),
+                    )
+                    .await
+                {
+                    Ok(secret) => {
+                        self.state.current_secret = Some(secret);
+                        self.state.status = Some("Updated".to_string());
+                        self.sync_from_service().await;
+                    }
+                    Err(err) => {
+                        self.state.status = Some(err.to_string());
+                        return Ok(());
+                    }
+                }
+            }
+            (Mode::ConfirmDelete, Command::Confirm) => {
+                let Some(id) = self.state.pending_delete_id else {
+                    self.state.status = Some("No item selected".to_string());
+                    return Ok(());
+                };
+
+                match self.service.delete_secret(id).await {
+                    Ok(()) => {
+                        if self
+                            .state
+                            .current_secret
+                            .as_ref()
+                            .map(|secret| secret.id == id)
+                            .unwrap_or(false)
+                        {
+                            self.state.current_secret = None;
+                        }
+                        self.state.status = Some("Deleted".to_string());
+                        self.sync_from_service().await;
+                    }
+                    Err(err) => {
+                        self.state.status = Some(err.to_string());
+                        return Ok(());
+                    }
+                }
             }
             _ => {}
         }
-        self.state.update(_command);
+        self.state.update(command);
         Ok(())
     }
 
@@ -114,5 +195,39 @@ impl TuiApp {
     pub fn draw(&mut self, _frame: &mut Frame) {
         // TODO: render layout and widgets based on state.mode and state data.
         todo!();
+    }
+}
+
+fn normalized_command(mode: Mode, raw: RawCommand) -> Command {
+    match (mode, raw) {
+        (_, RawCommand::Quit) => Command::Quit,
+        (_, RawCommand::Tick) => Command::Tick,
+        (_, RawCommand::None) => Command::None,
+
+        (_, RawCommand::Up) => Command::MoveUp,
+        (_, RawCommand::Down) => Command::MoveDown,
+        (_, RawCommand::PageUp) => Command::PageUp,
+        (_, RawCommand::PageDown) => Command::PageDown,
+
+        (Mode::List, RawCommand::Primary) => Command::OpenDetail,
+        (Mode::Detail, RawCommand::Secondary) => Command::BackToList,
+
+        (Mode::List, RawCommand::Search) => Command::StartSearch,
+        (Mode::Search, RawCommand::Primary) => Command::SearchApply,
+        (Mode::Search, RawCommand::Secondary) => Command::SearchCancel,
+        (Mode::Search, RawCommand::Char(c)) => Command::SearchInput(c),
+
+        (Mode::List, RawCommand::Add) => Command::StartAdd,
+        (Mode::List, RawCommand::Edit) => Command::StartEdit,
+        (Mode::List, RawCommand::Delete) => Command::StartDelete,
+
+        (Mode::AddForm, RawCommand::Primary) => Command::Confirm,
+        (Mode::AddForm, RawCommand::Secondary) => Command::Cancel,
+        (Mode::EditForm, RawCommand::Primary) => Command::Confirm,
+        (Mode::EditForm, RawCommand::Secondary) => Command::Cancel,
+        (Mode::ConfirmDelete, RawCommand::Primary) => Command::Confirm,
+        (Mode::ConfirmDelete, RawCommand::Secondary) => Command::Cancel,
+
+        _ => Command::None,
     }
 }

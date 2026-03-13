@@ -1,20 +1,32 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
+    // App Operation
     Quit,
+    Tick, // Refer to no input until timeout
+    None, // Refer to the undefined key
+
+    // Move
     MoveUp,
     MoveDown,
     PageUp,
     PageDown,
-    Open,
-    Back,
-    SearchStart,
+
+    // Detail <-> list
+    OpenDetail,
+    BackToList,
+
+    // Search
+    StartSearch,
     SearchInput(char),
     SearchApply,
     SearchCancel,
-    Add,
-    Edit,
-    Delete,
+
+    // Edit item
+    StartAdd,
+    StartEdit,
+    StartDelete,
+
+    // Verify
     Confirm,
     Cancel,
-    Tick, // Refer to no input until timeout
-    None, // Refer to the undefined key
 }

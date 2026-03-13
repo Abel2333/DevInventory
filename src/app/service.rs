@@ -42,6 +42,32 @@ impl SecretService {
         })
     }
 
+    pub async fn update_secret(
+        &self,
+        id: uuid::Uuid,
+        name: String,
+        value: Vec<u8>,
+        kind: Option<String>,
+        note: Option<String>,
+    ) -> Result<Secret, AppError> {
+        let ciphertext = self.crypto_service.encrypt(&name, &value)?;
+
+        let record = self
+            .repo
+            .update_secret(id, &name, kind, note, &ciphertext)
+            .await?;
+
+        Ok(Secret {
+            id: record.id,
+            name: record.name,
+            kind: record.kind,
+            note: record.note,
+            plaintext: value,
+            created_at: record.created_at,
+            updated_at: record.updated_at,
+        })
+    }
+
     /// Acquire the secret by id
     pub async fn get_secret(&self, id: uuid::Uuid) -> Result<Secret, AppError> {
         let record = if let Some(record) = self.repo.fetch_secret_by_id(id).await? {

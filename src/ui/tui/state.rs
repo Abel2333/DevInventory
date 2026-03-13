@@ -98,6 +98,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(secrets: Vec<SecretMetadata>) -> Self {
+        let filtered_indices = (0..secrets.len()).collect();
         Self {
             mode: Mode::default(),
             secrets,
@@ -109,7 +110,7 @@ impl AppState {
             current_secret: None,
             search_query: String::new(),
             search_cursor: 0,
-            filtered_indices: Vec::new(),
+            filtered_indices,
             form: None,
             pending_delete_id: None,
         }
@@ -248,6 +249,44 @@ impl AppState {
         self.mode = Self::transition(self.mode, cmd);
     }
 
+    pub fn rebuild_filter(&mut self) {
+        self.filtered_indices.clear();
+
+        if self.search_query.is_empty() {
+            self.filtered_indices.extend(0..self.secrets.len());
+            return;
+        }
+
+        let q = self.search_query.to_lowercase();
+        self.filtered_indices.extend(
+            self.secrets
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| {
+                    s.name.to_lowercase().contains(&q)
+                        || s.kind
+                            .as_ref()
+                            .map(|k| k.to_lowercase().contains(&q))
+                            .unwrap_or(false)
+                        || s.note
+                            .as_ref()
+                            .map(|n| n.to_lowercase().contains(&q))
+                            .unwrap_or(false)
+                })
+                .map(|(i, _)| i),
+        );
+    }
+
+    pub fn clamp_selection(&mut self) {
+        let len = self.filtered_indices.len();
+
+        if len == 0 {
+            self.list_index = 0;
+        } else {
+            self.list_index = self.list_index.min(len - 1)
+        }
+    }
+
     fn filter_secrets(&mut self, query: &str) {
         self.filtered_indices.clear();
 
@@ -277,11 +316,7 @@ impl AppState {
     }
 
     fn list_len(&self) -> usize {
-        if self.filtered_indices.is_empty() {
-            self.secrets.len()
-        } else {
-            self.filtered_indices.len()
-        }
+        self.filtered_indices.len()
     }
 
     fn page_step(&self) -> usize {
@@ -291,6 +326,7 @@ impl AppState {
     /// Update the scroll offset
     fn sync_scroll(&mut self) {
         let page = self.page_step();
+
         if self.list_index < self.scroll_offset {
             self.scroll_offset = self.list_index;
         } else if self.list_index >= self.scroll_offset + page {
@@ -298,14 +334,34 @@ impl AppState {
         }
     }
 
-    fn selected_metadata(&self) -> Option<&SecretMetadata> {
-        let index = if self.filtered_indices.is_empty() {
-            self.secrets.get(self.list_index).map(|_| self.list_index)
-        } else {
-            self.filtered_indices.get(self.list_index).copied()
-        };
+    pub fn normalize_view(&mut self) {
+        if self.filtered_indices.is_empty() {
+            self.list_index = 0;
+            self.scroll_offset = 0;
+            return;
+        }
 
-        index.and_then(|i| self.secrets.get(i))
+        self.clamp_selection();
+        self.sync_scroll();
+    }
+
+    pub fn reset_search(&mut self) {
+        self.search_query.clear();
+        self.search_cursor = 0;
+        self.rebuild_filter();
+        self.list_index = 0;
+        self.scroll_offset = 0;
+    }
+    pub fn refresh_search_results(&mut self) {
+        self.search_cursor = self.search_query.len();
+        self.rebuild_filter();
+        self.list_index = 0;
+        self.scroll_offset = 0;
+    }
+
+    fn selected_metadata(&self) -> Option<&SecretMetadata> {
+        let index = self.filtered_indices.get(self.list_index).copied()?;
+        self.secrets.get(index)
     }
 
     pub fn selected_id(&self) -> Option<Uuid> {
