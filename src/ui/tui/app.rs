@@ -100,7 +100,7 @@ impl TuiApp {
                 {
                     Ok(_) => {
                         self.state.status = Some("Saved".to_string());
-                        self.sync_from_service().await;
+                        self.sync_from_service().await?;
                     }
                     Err(err) => {
                         self.state.status = Some(err.to_string());
@@ -139,7 +139,7 @@ impl TuiApp {
                     Ok(secret) => {
                         self.state.current_secret = Some(secret);
                         self.state.status = Some("Updated".to_string());
-                        self.sync_from_service().await;
+                        self.sync_from_service().await?;
                     }
                     Err(err) => {
                         self.state.status = Some(err.to_string());
@@ -165,7 +165,7 @@ impl TuiApp {
                             self.state.current_secret = None;
                         }
                         self.state.status = Some("Deleted".to_string());
-                        self.sync_from_service().await;
+                        self.sync_from_service().await?;
                     }
                     Err(err) => {
                         self.state.status = Some(err.to_string());
@@ -181,14 +181,16 @@ impl TuiApp {
 
     /// Advance time-based behaviors (tick) like animations or polling.
     pub fn on_tick(&mut self) {
-        // TODO: update tick timestamps and refresh any time-driven state.
-        todo!();
+        self.state.update(Command::Tick);
     }
 
     /// Refresh state from the service layer (load list/detail data).
-    pub async fn sync_from_service(&mut self) {
-        // TODO: call SecretService and merge results into AppState.
-        todo!();
+    pub async fn sync_from_service(&mut self) -> Result<(), AppError> {
+        self.state.secrets = self.service.list_secrets().await?;
+        self.state.rebuild_filter();
+        self.state.clamp_selection();
+        self.state.normalize_view();
+        Ok(())
     }
 
     /// Draw the current UI from AppState into the ratatui Frame.
@@ -198,7 +200,7 @@ impl TuiApp {
     }
 }
 
-fn normalized_command(mode: Mode, raw: RawCommand) -> Command {
+pub fn normalized_command(mode: Mode, raw: RawCommand) -> Command {
     match (mode, raw) {
         (_, RawCommand::Quit) => Command::Quit,
         (_, RawCommand::Tick) => Command::Tick,

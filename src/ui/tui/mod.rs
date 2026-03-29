@@ -43,8 +43,41 @@
 //!
 //! Keeping these boundaries prevents inconsistent transitions and makes
 //! state changes easier to test.
+
+use std::time::{Duration, Instant};
+
+use crate::{app::SecretService, ui::tui::events::poll_raw_command};
 pub mod app;
 pub mod commands;
 pub mod events;
 pub mod state;
 pub mod terminal;
+
+pub async fn run_tui(service: SecretService) -> anyhow::Result<()> {
+    let mut terminal = terminal::init()?;
+    let secrets = service.list_secrets().await?;
+    let state = state::AppState::new(secrets);
+    let mut app = app::TuiApp::new(state, service);
+    let tick_rate = Duration::from_millis(200);
+    let mut last_tick = Instant::now();
+
+    loop {
+        terminal.draw(|frame| app.draw(frame))?;
+
+        let raw = poll_raw_command(tick_rate, &mut last_tick)?;
+        let command = app::normalized_command(app.state().mode, raw);
+
+        match command {
+            commands::Command::Tick => app.on_tick(),
+            commands::Command::None => {}
+            _ => app.on_command(command).await?,
+        }
+
+        if app.state().mode == state::Mode::Exit {
+            break;
+        }
+    }
+
+    terminal::restore()?;
+    Ok(())
+}

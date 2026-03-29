@@ -9,7 +9,7 @@
 //! - `(Mode::List, Command::MoveDown)` updates `list_index` and scroll offsets.
 //! - `(Mode::Search, Command::SearchInput('a'))` updates `search_query`
 //!   and `filtered_indices`.
-//! - `(Mode::List, Command::Open)` should only change `mode` (after validation),
+//! - `(Mode::List, Command::OpenDetail)` should only change `mode` (after validation),
 //!   while `app` handles loading the selected secret.
 use std::time::Instant;
 
@@ -127,11 +127,11 @@ impl AppState {
     fn transition(state: Mode, cmd: Command) -> Mode {
         match (state, cmd) {
             // From `List`
-            (Mode::List, Command::Open) => Mode::Detail,
-            (Mode::List, Command::SearchStart) => Mode::Search,
-            (Mode::List, Command::Add) => Mode::AddForm,
-            (Mode::List, Command::Edit) => Mode::EditForm,
-            (Mode::List, Command::Delete) => Mode::ConfirmDelete,
+            (Mode::List, Command::OpenDetail) => Mode::Detail,
+            (Mode::List, Command::StartSearch) => Mode::Search,
+            (Mode::List, Command::StartAdd) => Mode::AddForm,
+            (Mode::List, Command::StartEdit) => Mode::EditForm,
+            (Mode::List, Command::StartDelete) => Mode::ConfirmDelete,
             (Mode::List, Command::MoveUp) => Mode::List,
             (Mode::List, Command::MoveDown) => Mode::List,
             (Mode::List, Command::PageUp) => Mode::List,
@@ -139,7 +139,7 @@ impl AppState {
             (Mode::List, Command::Tick) => Mode::List,
             (Mode::List, Command::Quit) => Mode::Exit,
             // From `Detail`
-            (Mode::Detail, Command::Back) => Mode::List,
+            (Mode::Detail, Command::BackToList) => Mode::List,
             (Mode::Detail, Command::Tick) => Mode::Detail,
             (Mode::Detail, Command::Quit) => Mode::Exit,
             // From `Search`
@@ -190,24 +190,17 @@ impl AppState {
                 self.list_index = (self.list_index + step).min(max);
                 self.sync_scroll();
             }
-            (Mode::List, Command::SearchStart) => {
+            (Mode::List, Command::StartSearch) => {
                 self.search_query.clear();
                 self.search_cursor = 0;
                 self.filter_secrets("");
                 self.list_index = 0;
                 self.scroll_offset = 0;
             }
-            (Mode::List, Command::Add) => {
+            (Mode::List, Command::StartAdd) => {
                 self.form = Some(SecretForm::default());
             }
-            (Mode::List, Command::Edit) => {
-                if self.form.is_none() {
-                    self.status = Some("Edit not ready: form not prepared".to_string());
-                    // stay in List, do NOT transition
-                    return;
-                }
-            }
-            (Mode::List, Command::Delete) => {
+            (Mode::List, Command::StartDelete) => {
                 self.pending_delete_id = self.selected_id();
             }
             (Mode::Search, Command::SearchInput(c)) => {

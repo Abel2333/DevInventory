@@ -70,11 +70,11 @@ impl SecretService {
 
     /// Acquire the secret by id
     pub async fn get_secret(&self, id: uuid::Uuid) -> Result<Secret, AppError> {
-        let record = if let Some(record) = self.repo.fetch_secret_by_id(id).await? {
-            record
-        } else {
-            return Err(AppError::NotFound(id.to_string()));
-        };
+        let record = self
+            .repo
+            .fetch_secret_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(id.to_string()))?;
 
         self.secret_from_record(record)
     }

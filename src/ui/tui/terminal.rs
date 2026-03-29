@@ -1,3 +1,6 @@
+//! - This layer only store thee current terminal interface
+//! - And prepare a clear interfacee for the TUI.
+//!
 use std::{
     io::{self, Stdout, stdout},
     sync::Once,
