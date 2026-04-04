@@ -11,8 +11,9 @@
 //! - On `Command::Confirm` in `AddForm`, call `service.add_secret(...)`,
 //!   set a success status, then call `state.update(Command::Confirm)`.
 use ratatui::{
+    layout::{Constraint, Layout},
     prelude::Frame,
-    widgets::{Block, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 
 use crate::{
@@ -197,17 +198,86 @@ impl TuiApp {
 
     /// Draw the current UI from AppState into the ratatui Frame.
     pub fn draw(&mut self, frame: &mut Frame) {
-        let area = frame.area();
-
         let status = self.state.status.as_deref().unwrap_or("Ready");
-        let content = format!(
-            "DevInventory\n\nMode   : {:?}\nStatus  :{}\n\nPress q to quit",
-            self.state.mode, status
-        );
-        let block = Block::bordered().title("DevInventory");
-        let paragraph = Paragraph::new(content).block(block);
 
-        frame.render_widget(paragraph, area);
+        let vertical = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ]);
+
+        let [header_area, main_area, status_area] = vertical.areas(frame.area());
+
+        // Render Header
+        frame.render_widget(
+            Block::default().title("DevInventory").borders(Borders::ALL),
+            header_area,
+        );
+
+        let horizontal = Layout::horizontal([Constraint::Percentage(40), Constraint::Min(0)]);
+
+        let [list_area, detail_area] = horizontal.areas(main_area);
+
+        // Prepare for lists
+        let start = self.state.scroll_offset;
+        let end = (start + self.state.page_size).min(self.state.filtered_indices.len());
+
+        let items: Vec<ListItem> = self.state.filtered_indices[start..end]
+            .iter()
+            .map(|&idx| {
+                let secret = &self.state.secrets[idx];
+                let kind = secret.kind.as_deref().unwrap_or("-");
+                ListItem::new(format!("{} [{}]", secret.name, kind))
+            })
+            .collect();
+
+        // Render List area
+        let mut list_state = ListState::default();
+        let list = if items.is_empty() {
+            List::new(vec![ListItem::new("No Secrets")])
+                .block(Block::default().title("Secrets").borders(Borders::ALL))
+        } else {
+            let visible_len = end - start;
+            let selected = self
+                .state
+                .list_index
+                .saturating_sub(start)
+                .min(visible_len - 1);
+            list_state.select(Some(selected));
+
+            List::new(items)
+                .block(Block::default().title("Secrets").borders(Borders::ALL))
+                .highlight_symbol("> ")
+        };
+
+        frame.render_stateful_widget(list, list_area, &mut list_state);
+
+        // Prepare for detail
+        let detail_text = match (&self.state.mode, &self.state.current_secret) {
+            (Mode::Detail, Some(secret)) => format!(
+                "Name: {}\nKind: {}\nNote: {}",
+                secret.name,
+                secret.kind.as_deref().unwrap_or("-"),
+                secret.note.as_deref().unwrap_or("-")
+            ),
+            _ => "Select a secret and press Enter".to_string(),
+        };
+
+        // Render Detail
+        frame.render_widget(
+            Paragraph::new(detail_text)
+                .block(Block::default().title("Detail").borders(Borders::ALL)),
+            detail_area,
+        );
+
+        // Render Status
+        frame.render_widget(
+            Paragraph::new(format!(
+                "Mode: {:?} | Status: {} | q quit | Enter open | / search | a add",
+                self.state.mode, status
+            )),
+            status_area,
+        );
     }
 }
 
