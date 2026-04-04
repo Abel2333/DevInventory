@@ -1,6 +1,7 @@
-//! - This layer only store thee current terminal interface
-//! - And prepare a clear interfacee for the TUI.
+//! Terminal lifecycle helpers for the TUI runtime.
 //!
+//! This module is responsible for entering and restoring terminal state
+//! (alternate screen, raw mode, panic-safe cleanup).
 use std::{
     io::{self, Stdout, stdout},
     sync::Once,
@@ -17,7 +18,7 @@ static PANIC_HOOK: Once = Once::new();
 /// A short alias of terminal type
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
-/// Initialze the terminal
+/// Initialize the terminal for interactive TUI rendering.
 pub fn init() -> std::io::Result<Tui> {
     execute!(stdout(), EnterAlternateScreen)?;
     enable_raw_mode()?;

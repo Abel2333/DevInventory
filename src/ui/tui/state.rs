@@ -361,3 +361,100 @@ impl AppState {
         self.selected_metadata().map(|m| m.id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::SecretMetadata;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    fn metadata(name: &str) -> SecretMetadata {
+        SecretMetadata {
+            id: Uuid::new_v4(),
+            name: name.to_string(),
+            kind: Some("test".to_string()),
+            note: Some(format!("note-{name}")),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_state() -> AppState {
+        AppState::new(vec![metadata("alpha"), metadata("beta"), metadata("gamma")])
+    }
+
+    #[test]
+    fn move_down() {
+        let mut state = sample_state();
+
+        state.update(Command::MoveDown);
+
+        assert_eq!(state.list_index, 1);
+        assert_eq!(state.mode, Mode::List);
+    }
+
+    #[test]
+    fn start_search() {
+        let mut state = sample_state();
+        state.search_query = "abc".to_string();
+        state.search_cursor = 3;
+        state.list_index = 2;
+        state.scroll_offset = 1;
+
+        state.update(Command::StartSearch);
+
+        assert_eq!(state.mode, Mode::Search);
+        assert!(state.search_query.is_empty());
+        assert_eq!(state.search_cursor, 0);
+        assert_eq!(state.list_index, 0);
+        assert_eq!(state.scroll_offset, 0);
+    }
+
+    #[test]
+    fn search_input() {
+        let mut state = sample_state();
+        state.update(Command::StartSearch);
+
+        state.update(Command::SearchInput('b'));
+
+        assert_eq!(state.mode, Mode::Search);
+        assert_eq!(state.search_query, "b");
+        assert_eq!(state.search_cursor, 1);
+        assert_eq!(state.filtered_indices.len(), 1);
+        assert_eq!(state.secrets[state.filtered_indices[0]].name, "beta");
+    }
+
+    #[test]
+    fn confirm_back_to_list() {
+        let mut state = sample_state();
+
+        state.update(Command::StartAdd);
+        state.update(Command::Confirm);
+
+        assert_eq!(state.mode, Mode::List);
+        assert!(state.form.is_none());
+    }
+
+    #[test]
+    fn delete_item() {
+        let mut state = sample_state();
+
+        let expected = state.selected_id();
+        state.update(Command::StartDelete);
+
+        assert_eq!(state.mode, Mode::ConfirmDelete);
+        assert_eq!(state.pending_delete_id, expected);
+    }
+
+    #[test]
+    fn tick_updates() {
+        let mut state = sample_state();
+        let before = state.last_tick;
+
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        state.update(Command::Tick);
+
+        assert!(state.last_tick >= before);
+    }
+}

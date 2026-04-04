@@ -6,11 +6,14 @@
 //! - Always delegate transitions to `AppState::update`.
 //!
 //! Examples:
-//! - On `Command::Open`, fetch the selected secret and set `state.current_secret`,
-//!   then call `state.update(Command::Open)`.
+//! - On `Command::OpenDetail`, fetch the selected secret and set `state.current_secret`,
+//!   then call `state.update(Command::OpenDetail)`.
 //! - On `Command::Confirm` in `AddForm`, call `service.add_secret(...)`,
 //!   set a success status, then call `state.update(Command::Confirm)`.
-use ratatui::prelude::Frame;
+use ratatui::{
+    prelude::Frame,
+    widgets::{Block, Paragraph},
+};
 
 use crate::{
     app::SecretService,
@@ -44,7 +47,6 @@ impl TuiApp {
 
     /// Route a high-level Command into state changes and side effects.
     pub async fn on_command(&mut self, command: Command) -> Result<(), AppError> {
-        // TODO: update AppState based on command and trigger service calls.
         match (self.state.mode, &command) {
             (Mode::List, Command::OpenDetail) => {
                 let Some(id) = self.state.selected_id() else {
@@ -194,12 +196,22 @@ impl TuiApp {
     }
 
     /// Draw the current UI from AppState into the ratatui Frame.
-    pub fn draw(&mut self, _frame: &mut Frame) {
-        // TODO: render layout and widgets based on state.mode and state data.
-        todo!();
+    pub fn draw(&mut self, frame: &mut Frame) {
+        let area = frame.area();
+
+        let status = self.state.status.as_deref().unwrap_or("Ready");
+        let content = format!(
+            "DevInventory\n\nMode   : {:?}\nStatus  :{}\n\nPress q to quit",
+            self.state.mode, status
+        );
+        let block = Block::bordered().title("DevInventory");
+        let paragraph = Paragraph::new(content).block(block);
+
+        frame.render_widget(paragraph, area);
     }
 }
 
+/// Resolve a mode-agnostic `RawCommand` into a mode-aware application `Command`.
 pub fn normalized_command(mode: Mode, raw: RawCommand) -> Command {
     match (mode, raw) {
         (_, RawCommand::Quit) => Command::Quit,
@@ -231,5 +243,30 @@ pub fn normalized_command(mode: Mode, raw: RawCommand) -> Command {
         (Mode::ConfirmDelete, RawCommand::Secondary) => Command::Cancel,
 
         _ => Command::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::tui::events::RawCommand;
+
+    #[test]
+    fn normalized_command_maps() {
+        let cases = [
+            (Mode::List, RawCommand::Primary, Command::OpenDetail),
+            (Mode::Detail, RawCommand::Secondary, Command::BackToList),
+            (Mode::List, RawCommand::Search, Command::StartSearch),
+            (Mode::List, RawCommand::Add, Command::StartAdd),
+            (Mode::List, RawCommand::Edit, Command::StartEdit),
+            (Mode::List, RawCommand::Delete, Command::StartDelete),
+            (Mode::AddForm, RawCommand::Primary, Command::Confirm),
+            (Mode::AddForm, RawCommand::Secondary, Command::Cancel),
+            (Mode::ConfirmDelete, RawCommand::Secondary, Command::Cancel),
+        ];
+
+        for (mode, raw, expeected) in cases {
+            assert_eq!(normalized_command(mode, raw), expeected);
+        }
     }
 }

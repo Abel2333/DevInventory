@@ -1,31 +1,39 @@
 //! TUI module boundaries and responsibilities.
 //!
 //! This module is intentionally split into three stages to keep responsibilities clear:
-//! 1. `events` maps raw terminal input into `Command` values.
-//! 2. `state` applies *pure* state transitions (no I/O, no service calls).
-//! 3. `app` performs side effects (service calls) and then delegates to `state`.
+//! 1. `events` maps raw terminal input into `RawCommand` values.
+//! 2. `app::normalized_command` resolves `RawCommand` into mode-aware `Command` values.
+//! 3. `state` applies *pure* state transitions (no I/O, no service calls).
+//! 4. `app` performs side effects (service calls), delegates transitions to `state`,
+//!    and renders the current `AppState`.
 //!
 //! If you change behavior, keep the rules below intact to avoid drift.
 //!
 //! # Boundaries (with examples)
 //!
-//! ## `events` (input -> command)
-//! - Only maps input events to `Command`.
+//! ## `events` (input -> raw command)
+//! - Only maps terminal input events to `RawCommand`.
 //! - Does not read or mutate `AppState`.
 //! - Does not call services.
 //!
 //! Example:
-//! - `KeyCode::Char('a')` -> `Command::Add`
-//! - `KeyCode::Char('/')` -> `Command::SearchStart`
+//! - `KeyCode::Char('a')` -> `RawCommand::Add`
+//! - `KeyCode::Char('/')` -> `RawCommand::Search`
+//!
+//! ## `normalized_command` (raw command -> command)
+//! - Resolves the same raw input differently depending on the current `Mode`.
+//! - Does not call services or mutate `AppState`.
+//!
+//! Example:
+//! - `(Mode::List, RawCommand::Primary)` -> `Command::OpenDetail`
+//! - `(Mode::AddForm, RawCommand::Primary)` -> `Command::Confirm`
 //!
 //! ## `state` (command -> state transition)
 //! - Pure state updates: mode changes, cursor/index, form buffers, search query.
-//! - Validates whether a transition is allowed.
 //! - Must not call `SecretService` or touch I/O.
 //!
 //! Example:
-//! - `(Mode::List, Command::Open)` transitions to `Mode::Detail`
-//!   only if a selection exists; otherwise set `status` and stay in `List`.
+//! - `(Mode::List, Command::OpenDetail)` transitions to `Mode::Detail`.
 //! - `(Mode::Search, Command::SearchInput('a'))` appends to `search_query`
 //!   and updates `filtered_indices`.
 //!
@@ -36,7 +44,7 @@
 //! - Always delegates mode transitions to `AppState::update`.
 //!
 //! Example:
-//! - When command is `Open`, `app` calls `service.get_secret(...)`
+//! - When command is `OpenDetail`, `app` calls `service.get_secret(...)`
 //!   and stores it into `state.current_secret`, then calls `state.update(cmd)`.
 //! - When command is `Confirm` in `AddForm`, `app` calls `service.add_secret(...)`,
 //!   sets a success status, then calls `state.update(cmd)`.
