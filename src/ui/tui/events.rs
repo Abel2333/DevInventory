@@ -62,6 +62,7 @@ pub fn poll_raw_command(tick_rate: Duration, last_tick: &mut Instant) -> io::Res
             _ => Ok(RawCommand::None),
         }
     } else {
+        *last_tick = Instant::now();
         Ok(RawCommand::Tick)
     }
 }
