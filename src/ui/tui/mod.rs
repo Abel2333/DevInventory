@@ -60,6 +60,8 @@ pub mod commands;
 pub mod events;
 pub mod state;
 pub mod terminal;
+pub mod views;
+pub mod screens;
 
 pub async fn run_tui(service: SecretService) -> anyhow::Result<()> {
     let mut terminal = terminal::init()?;

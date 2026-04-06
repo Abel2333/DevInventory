@@ -214,7 +214,7 @@ impl AppState {
             (Mode::Search, Command::SearchCancel) => {
                 self.search_query.clear();
                 self.search_cursor = 0;
-                self.filtered_indices.clear();
+                self.filter_secrets("");
                 self.list_index = 0;
                 self.scroll_offset = 0;
             }
