@@ -229,29 +229,34 @@ impl TuiApp {
 /// Resolve a mode-agnostic `RawCommand` into a mode-aware application `Command`.
 pub fn normalized_command(mode: Mode, raw: RawCommand) -> Command {
     match (mode, raw) {
-        (_, RawCommand::Quit) => Command::Quit,
         (_, RawCommand::Tick) => Command::Tick,
         (_, RawCommand::None) => Command::None,
 
-        (_, RawCommand::Up) => Command::MoveUp,
-        (_, RawCommand::Down) => Command::MoveDown,
-        (_, RawCommand::PageUp) => Command::PageUp,
-        (_, RawCommand::PageDown) => Command::PageDown,
+        (Mode::List, RawCommand::Up) => Command::MoveUp,
+        (Mode::List, RawCommand::Down) => Command::MoveDown,
+        (Mode::List, RawCommand::PageUp) => Command::PageUp,
+        (Mode::List, RawCommand::PageDown) => Command::PageDown,
 
+        (Mode::List, RawCommand::Char('q')) => Command::Quit,
         (Mode::List, RawCommand::Primary) => Command::OpenDetail,
+        (Mode::List, RawCommand::Char('/')) => Command::StartSearch,
+        (Mode::List, RawCommand::Char('a')) => Command::StartAdd,
+        (Mode::List, RawCommand::Char('e')) => Command::StartEdit,
+        (Mode::List, RawCommand::Char('d')) => Command::StartDelete,
+
         (Mode::Detail, RawCommand::Secondary) => Command::BackToList,
 
-        (Mode::List, RawCommand::Search) => Command::StartSearch,
         (Mode::Search, RawCommand::Primary) => Command::SearchApply,
         (Mode::Search, RawCommand::Secondary) => Command::SearchCancel,
         (Mode::Search, RawCommand::Char(c)) => Command::SearchInput(c),
 
-        (Mode::List, RawCommand::Add) => Command::StartAdd,
-        (Mode::List, RawCommand::Edit) => Command::StartEdit,
-        (Mode::List, RawCommand::Delete) => Command::StartDelete,
-
         (Mode::AddForm, RawCommand::Primary) => Command::Confirm,
         (Mode::AddForm, RawCommand::Secondary) => Command::Cancel,
+        (Mode::AddForm, RawCommand::Char(c)) => Command::FormInput(c),
+        (Mode::AddForm, RawCommand::Up) => Command::FormPrevField,
+        (Mode::AddForm, RawCommand::Down) => Command::FormNextField,
+        (Mode::AddForm, RawCommand::Backspace) => Command::FormBackspace,
+
         (Mode::EditForm, RawCommand::Primary) => Command::Confirm,
         (Mode::EditForm, RawCommand::Secondary) => Command::Cancel,
         (Mode::ConfirmDelete, RawCommand::Primary) => Command::Confirm,
@@ -270,13 +275,18 @@ mod tests {
     fn normalized_command_maps() {
         let cases = [
             (Mode::List, RawCommand::Primary, Command::OpenDetail),
+            (Mode::List, RawCommand::Char('q'), Command::Quit),
+            (Mode::List, RawCommand::Char('/'), Command::StartSearch),
+            (Mode::List, RawCommand::Char('a'), Command::StartAdd),
+            (Mode::List, RawCommand::Char('e'), Command::StartEdit),
+            (Mode::List, RawCommand::Char('d'), Command::StartDelete),
             (Mode::Detail, RawCommand::Secondary, Command::BackToList),
-            (Mode::List, RawCommand::Search, Command::StartSearch),
-            (Mode::List, RawCommand::Add, Command::StartAdd),
-            (Mode::List, RawCommand::Edit, Command::StartEdit),
-            (Mode::List, RawCommand::Delete, Command::StartDelete),
             (Mode::AddForm, RawCommand::Primary, Command::Confirm),
             (Mode::AddForm, RawCommand::Secondary, Command::Cancel),
+            (Mode::AddForm, RawCommand::Char('a'), Command::FormInput('a')),
+            (Mode::AddForm, RawCommand::Up, Command::FormPrevField),
+            (Mode::AddForm, RawCommand::Down, Command::FormNextField),
+            (Mode::AddForm, RawCommand::Backspace, Command::FormBackspace),
             (Mode::ConfirmDelete, RawCommand::Secondary, Command::Cancel),
         ];
 

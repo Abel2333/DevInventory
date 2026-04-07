@@ -50,7 +50,7 @@ pub struct SecretForm {
     pub kind: Option<String>,
     pub note: Option<String>,
     pub plaintext: String, // User-entered plaintext (not Vec<u8>, for easier editing)
-    pub cursor_field: FormField, // 0=name, 1=kind, 2=note, 3=plaintext
+    pub cursor_field: FormField,
     pub dirty: bool,
 }
 
@@ -65,6 +65,58 @@ impl SecretForm {
             plaintext: String::from_utf8_lossy(&secret.plaintext).to_string(),
             ..Default::default()
         }
+    }
+
+    fn next_field(&mut self) {
+        self.cursor_field = match self.cursor_field {
+            FormField::Name => FormField::Kind,
+            FormField::Kind => FormField::Note,
+            FormField::Note => FormField::Plaintext,
+            FormField::Plaintext => FormField::Name,
+        }
+    }
+
+    fn prev_field(&mut self) {
+        self.cursor_field = match self.cursor_field {
+            FormField::Name => FormField::Plaintext,
+            FormField::Kind => FormField::Name,
+            FormField::Note => FormField::Kind,
+            FormField::Plaintext => FormField::Note,
+        }
+    }
+
+    fn push_char(&mut self, c: char) {
+        match self.cursor_field {
+            FormField::Name => self.name.push(c),
+            FormField::Kind => self.kind.get_or_insert(String::new()).push(c),
+            FormField::Note => self.note.get_or_insert(String::new()).push(c),
+            FormField::Plaintext => self.plaintext.push(c),
+        }
+
+        self.dirty = true
+    }
+
+    fn backspace(&mut self) {
+        match self.cursor_field {
+            FormField::Name => {
+                self.name.pop();
+            }
+            FormField::Kind => {
+                if let Some(v) = self.kind.as_mut() {
+                    v.pop();
+                }
+            }
+            FormField::Note => {
+                if let Some(v) = self.note.as_mut() {
+                    v.pop();
+                }
+            }
+            FormField::Plaintext => {
+                self.plaintext.pop();
+            }
+        }
+
+        self.dirty = true
     }
 }
 
@@ -224,9 +276,40 @@ impl AppState {
                 self.list_index = 0;
                 self.scroll_offset = 0;
             }
+
+            // Add Form
             (Mode::AddForm, Command::Confirm) | (Mode::AddForm, Command::Cancel) => {
                 self.form = None;
             }
+            (Mode::AddForm, Command::FormNextField) => {
+                let Some(form) = self.form.as_mut() else {
+                    return;
+                };
+
+                form.next_field();
+            }
+            (Mode::AddForm, Command::FormPrevField) => {
+                let Some(form) = self.form.as_mut() else {
+                    return;
+                };
+
+                form.prev_field();
+            }
+            (Mode::AddForm, Command::FormInput(c)) => {
+                let Some(form) = self.form.as_mut() else {
+                    return;
+                };
+
+                form.push_char(*c);
+            }
+            (Mode::AddForm, Command::FormBackspace) => {
+                let Some(form) = self.form.as_mut() else {
+                    return;
+                };
+
+                form.backspace();
+            }
+
             (Mode::EditForm, Command::Confirm) | (Mode::EditForm, Command::Cancel) => {
                 self.form = None;
             }

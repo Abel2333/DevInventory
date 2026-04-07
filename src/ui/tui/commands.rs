@@ -26,6 +26,12 @@ pub enum Command {
     StartEdit,
     StartDelete,
 
+    // Edit Form
+    FormInput(char),
+    FormBackspace,
+    FormNextField,
+    FormPrevField,
+
     // Verify
     Confirm,
     Cancel,

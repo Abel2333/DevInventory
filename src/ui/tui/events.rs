@@ -6,7 +6,7 @@
 //! - Keep mappings deterministic (no hidden state).
 //!
 //! Example:
-//! - `KeyCode::Char('q')` -> `RawCommand::Quit`
+//! - `KeyCode::Char('q')` -> `RawCommand::Char('q')`
 //! - `KeyCode::Char(c)` -> `RawCommand::Char(c)`
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
 use std::{
@@ -16,7 +16,6 @@ use std::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RawCommand {
-    Quit,
     Tick,
     None,
 
@@ -28,28 +27,20 @@ pub enum RawCommand {
     Primary,
     Secondary,
 
-    Search,
-    Add,
-    Edit,
-    Delete,
-
     Char(char),
+    Backspace,
 }
 
 pub fn map_key(key: KeyEvent) -> RawCommand {
     match (key.code, key.modifiers) {
-        (KeyCode::Char('q'), _) => RawCommand::Quit,
-        (KeyCode::Up, _) | (KeyCode::Char('k'), _) => RawCommand::Up,
-        (KeyCode::Down, _) | (KeyCode::Char('j'), _) => RawCommand::Down,
+        (KeyCode::Up, _) => RawCommand::Up,
+        (KeyCode::Down, _) => RawCommand::Down,
         (KeyCode::PageUp, _) => RawCommand::PageUp,
         (KeyCode::PageDown, _) => RawCommand::PageDown,
         (KeyCode::Enter, _) => RawCommand::Primary,
         (KeyCode::Esc, _) => RawCommand::Secondary,
-        (KeyCode::Char('a'), _) => RawCommand::Add,
-        (KeyCode::Char('e'), _) => RawCommand::Edit,
-        (KeyCode::Char('d'), _) => RawCommand::Delete,
-        (KeyCode::Char('/'), _) => RawCommand::Search,
         (KeyCode::Char(c), _) => RawCommand::Char(c),
+        (KeyCode::Backspace, _) => RawCommand::Backspace,
         _ => RawCommand::None,
     }
 }
